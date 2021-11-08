@@ -5,254 +5,118 @@
 #ifndef V8_UNITTESTS_TEST_UTILS_H_
 #define V8_UNITTESTS_TEST_UTILS_H_
 
-#include <memory>
-#include <vector>
-
-#include "include/v8-array-buffer.h"
-#include "include/v8-context.h"
-#include "include/v8-local-handle.h"
-#include "include/v8-primitive.h"
-#include "src/api/api-inl.h"
+#include "include/v8.h"
 #include "src/base/macros.h"
 #include "src/base/utils/random-number-generator.h"
-#include "src/handles/handles.h"
-#include "src/objects/objects-inl.h"
-#include "src/objects/objects.h"
-#include "src/zone/accounting-allocator.h"
-#include "src/zone/zone.h"
+#include "src/zone.h"
 #include "testing/gtest-support.h"
 
 namespace v8 {
 
 class ArrayBufferAllocator;
 
-using CounterMap = std::map<std::string, int>;
 
-enum CountersMode { kNoCounters, kEnableCounters };
-
-// RAII-like Isolate instance wrapper.
-class IsolateWrapper final {
+class TestWithIsolate : public virtual ::testing::Test {
  public:
-  explicit IsolateWrapper(CountersMode counters_mode);
-  ~IsolateWrapper();
-  IsolateWrapper(const IsolateWrapper&) = delete;
-  IsolateWrapper& operator=(const IsolateWrapper&) = delete;
+  TestWithIsolate();
+  virtual ~TestWithIsolate();
 
-  v8::Isolate* isolate() const { return isolate_; }
+  Isolate* isolate() const { return isolate_; }
+
+  static void SetUpTestCase();
+  static void TearDownTestCase();
 
  private:
-  std::unique_ptr<v8::ArrayBuffer::Allocator> array_buffer_allocator_;
-  std::unique_ptr<CounterMap> counter_map_;
-  v8::Isolate* isolate_;
+  static ArrayBufferAllocator* array_buffer_allocator_;
+  static Isolate* isolate_;
+  Isolate::Scope isolate_scope_;
+  HandleScope handle_scope_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestWithIsolate);
 };
 
-//
-// A set of mixins from which the test fixtures will be constructed.
-//
-template <typename TMixin, CountersMode kCountersMode = kNoCounters>
-class WithIsolateMixin : public TMixin {
- public:
-  WithIsolateMixin() : isolate_wrapper_(kCountersMode) {}
 
-  v8::Isolate* v8_isolate() const { return isolate_wrapper_.isolate(); }
+class TestWithContext : public virtual TestWithIsolate {
+ public:
+  TestWithContext();
+  virtual ~TestWithContext();
+
+  const Local<Context>& context() const { return context_; }
 
  private:
-  v8::IsolateWrapper isolate_wrapper_;
+  Local<Context> context_;
+  Context::Scope context_scope_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestWithContext);
 };
 
-template <typename TMixin>
-class WithIsolateScopeMixin : public TMixin {
+
+namespace base {
+
+class TestWithRandomNumberGenerator : public ::testing::Test {
  public:
-  WithIsolateScopeMixin()
-      : isolate_scope_(this->v8_isolate()), handle_scope_(this->v8_isolate()) {}
-  WithIsolateScopeMixin(const WithIsolateScopeMixin&) = delete;
-  WithIsolateScopeMixin& operator=(const WithIsolateScopeMixin&) = delete;
+  TestWithRandomNumberGenerator();
+  virtual ~TestWithRandomNumberGenerator();
 
-  v8::Isolate* isolate() const { return this->v8_isolate(); }
-
-  v8::internal::Isolate* i_isolate() const {
-    return reinterpret_cast<v8::internal::Isolate*>(this->v8_isolate());
-  }
+  RandomNumberGenerator* rng() { return &rng_; }
 
  private:
-  v8::Isolate::Scope isolate_scope_;
-  v8::HandleScope handle_scope_;
+  RandomNumberGenerator rng_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestWithRandomNumberGenerator);
 };
 
-template <typename TMixin>
-class WithContextMixin : public TMixin {
- public:
-  WithContextMixin()
-      : context_(Context::New(this->v8_isolate())), context_scope_(context_) {}
-  WithContextMixin(const WithContextMixin&) = delete;
-  WithContextMixin& operator=(const WithContextMixin&) = delete;
+}  // namespace base
 
-  const Local<Context>& context() const { return v8_context(); }
-  const Local<Context>& v8_context() const { return context_; }
-
-  Local<Value> RunJS(const char* source) {
-    return RunJS(
-        v8::String::NewFromUtf8(this->v8_isolate(), source).ToLocalChecked());
-  }
-
-  Local<Value> RunJS(v8::String::ExternalOneByteStringResource* source) {
-    return RunJS(v8::String::NewExternalOneByte(this->v8_isolate(), source)
-                     .ToLocalChecked());
-  }
-
-  v8::Local<v8::String> NewString(const char* string) {
-    return v8::String::NewFromUtf8(this->v8_isolate(), string).ToLocalChecked();
-  }
-
-  void SetGlobalProperty(const char* name, v8::Local<v8::Value> value) {
-    CHECK(v8_context()
-              ->Global()
-              ->Set(v8_context(), NewString(name), value)
-              .FromJust());
-  }
-
- private:
-  Local<Value> RunJS(Local<String> source) {
-    auto context = this->v8_isolate()->GetCurrentContext();
-    Local<Script> script =
-        v8::Script::Compile(context, source).ToLocalChecked();
-    return script->Run(context).ToLocalChecked();
-  }
-
-  v8::Local<v8::Context> context_;
-  v8::Context::Scope context_scope_;
-};
-
-// Use v8::internal::TestWithIsolate if you are testing internals,
-// aka. directly work with Handles.
-using TestWithIsolate =     //
-    WithIsolateScopeMixin<  //
-        WithIsolateMixin<   //
-            ::testing::Test>>;
-
-// Use v8::internal::TestWithNativeContext if you are testing internals,
-// aka. directly work with Handles.
-using TestWithContext =         //
-    WithContextMixin<           //
-        WithIsolateScopeMixin<  //
-            WithIsolateMixin<   //
-                ::testing::Test>>>;
 
 namespace internal {
 
 // Forward declarations.
 class Factory;
 
-template <typename TMixin>
-class WithInternalIsolateMixin : public TMixin {
+
+class TestWithIsolate : public virtual ::v8::TestWithIsolate {
  public:
-  WithInternalIsolateMixin() = default;
-  WithInternalIsolateMixin(const WithInternalIsolateMixin&) = delete;
-  WithInternalIsolateMixin& operator=(const WithInternalIsolateMixin&) = delete;
+  TestWithIsolate() {}
+  virtual ~TestWithIsolate();
 
-  Factory* factory() const { return isolate()->factory(); }
-  Isolate* isolate() const { return TMixin::i_isolate(); }
-
-  Handle<NativeContext> native_context() const {
-    return isolate()->native_context();
+  Factory* factory() const;
+  Isolate* isolate() const {
+    return reinterpret_cast<Isolate*>(::v8::TestWithIsolate::isolate());
   }
+  base::RandomNumberGenerator* random_number_generator() const;
 
-  template <typename T = Object>
-  Handle<T> RunJS(const char* source) {
-    return Handle<T>::cast(RunJSInternal(source));
-  }
-
-  Handle<Object> RunJSInternal(const char* source) {
-    return Utils::OpenHandle(*TMixin::RunJS(source));
-  }
-
-  template <typename T = Object>
-  Handle<T> RunJS(::v8::String::ExternalOneByteStringResource* source) {
-    return Handle<T>::cast(RunJSInternal(source));
-  }
-
-  Handle<Object> RunJSInternal(
-      ::v8::String::ExternalOneByteStringResource* source) {
-    return Utils::OpenHandle(*TMixin::RunJS(source));
-  }
-
-  base::RandomNumberGenerator* random_number_generator() const {
-    return isolate()->random_number_generator();
-  }
+ private:
+  DISALLOW_COPY_AND_ASSIGN(TestWithIsolate);
 };
 
-template <typename TMixin>
-class WithZoneMixin : public TMixin {
+
+class TestWithZone : public virtual ::testing::Test {
  public:
-  explicit WithZoneMixin(bool support_zone_compression = false)
-      : zone_(&allocator_, ZONE_NAME, support_zone_compression) {}
-  WithZoneMixin(const WithZoneMixin&) = delete;
-  WithZoneMixin& operator=(const WithZoneMixin&) = delete;
+  TestWithZone() {}
+  virtual ~TestWithZone();
 
   Zone* zone() { return &zone_; }
 
  private:
-  v8::internal::AccountingAllocator allocator_;
   Zone zone_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestWithZone);
 };
 
-using TestWithIsolate =         //
-    WithInternalIsolateMixin<   //
-        WithIsolateScopeMixin<  //
-            WithIsolateMixin<   //
-                ::testing::Test>>>;
 
-using TestWithZone = WithZoneMixin<::testing::Test>;
-
-using TestWithIsolateAndZone =      //
-    WithZoneMixin<                  //
-        WithInternalIsolateMixin<   //
-            WithIsolateScopeMixin<  //
-                WithIsolateMixin<   //
-                    ::testing::Test>>>>;
-
-using TestWithNativeContext =       //
-    WithInternalIsolateMixin<       //
-        WithContextMixin<           //
-            WithIsolateScopeMixin<  //
-                WithIsolateMixin<   //
-                    ::testing::Test>>>>;
-
-using TestWithNativeContextAndCounters =  //
-    WithInternalIsolateMixin<             //
-        WithContextMixin<                 //
-            WithIsolateScopeMixin<        //
-                WithIsolateMixin<         //
-                    ::testing::Test, kEnableCounters>>>>;
-
-using TestWithNativeContextAndZone =    //
-    WithZoneMixin<                      //
-        WithInternalIsolateMixin<       //
-            WithContextMixin<           //
-                WithIsolateScopeMixin<  //
-                    WithIsolateMixin<   //
-                        ::testing::Test>>>>>;
-
-class V8_NODISCARD SaveFlags {
+class TestWithIsolateAndZone : public virtual TestWithIsolate {
  public:
-  SaveFlags();
-  ~SaveFlags();
-  SaveFlags(const SaveFlags&) = delete;
-  SaveFlags& operator=(const SaveFlags&) = delete;
+  TestWithIsolateAndZone() {}
+  virtual ~TestWithIsolateAndZone();
+
+  Zone* zone() { return &zone_; }
 
  private:
-#define FLAG_MODE_APPLY(ftype, ctype, nam, def, cmt) ctype SAVED_##nam;
-#include "src/flags/flag-definitions.h"
-#undef FLAG_MODE_APPLY
-};
+  Zone zone_;
 
-// For GTest.
-inline void PrintTo(Object o, ::std::ostream* os) {
-  *os << reinterpret_cast<void*>(o.ptr());
-}
-inline void PrintTo(Smi o, ::std::ostream* os) {
-  *os << reinterpret_cast<void*>(o.ptr());
-}
+  DISALLOW_COPY_AND_ASSIGN(TestWithIsolateAndZone);
+};
 
 }  // namespace internal
 }  // namespace v8

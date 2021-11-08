@@ -144,7 +144,6 @@
   var object = {
     method() { return 42; }
   };
-  %PrepareFunctionForOptimization(object.method);
   assertEquals(42, object.method());
   assertEquals(42, object.method());
   %OptimizeFunctionOnNextCall(object.method);

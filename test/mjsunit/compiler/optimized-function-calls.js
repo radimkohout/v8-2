@@ -48,7 +48,6 @@ delete object.x;
 function call_f(o) {
   return o.f();
 }
-%PrepareFunctionForOptimization(call_f);
 for (var i = 0; i < 5; i++) call_f(object);
 %OptimizeFunctionOnNextCall(call_f);
 call_f(object);

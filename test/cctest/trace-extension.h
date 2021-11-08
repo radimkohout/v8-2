@@ -28,14 +28,9 @@
 #ifndef V8_TEST_CCTEST_TRACE_EXTENSION_H_
 #define V8_TEST_CCTEST_TRACE_EXTENSION_H_
 
-#include "include/v8-extension.h"
-#include "src/common/globals.h"
+#include "src/v8.h"
 
 namespace v8 {
-
-template <typename T>
-class FunctionCallbackInfo;
-
 namespace internal {
 
 struct TickSample;
@@ -43,8 +38,8 @@ struct TickSample;
 class TraceExtension : public v8::Extension {
  public:
   TraceExtension() : v8::Extension("v8/trace", kSource) { }
-  v8::Local<v8::FunctionTemplate> GetNativeFunctionTemplate(
-      v8::Isolate* isolate, v8::Local<v8::String> name) override;
+  virtual v8::Local<v8::FunctionTemplate> GetNativeFunctionTemplate(
+      v8::Isolate* isolate, v8::Local<v8::String> name);
   static void Trace(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void JSTrace(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void JSEntrySP(const v8::FunctionCallbackInfo<v8::Value>& args);

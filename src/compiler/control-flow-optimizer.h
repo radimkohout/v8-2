@@ -5,15 +5,11 @@
 #ifndef V8_COMPILER_CONTROL_FLOW_OPTIMIZER_H_
 #define V8_COMPILER_CONTROL_FLOW_OPTIMIZER_H_
 
-#include "src/common/globals.h"
 #include "src/compiler/node-marker.h"
-#include "src/zone/zone-containers.h"
+#include "src/zone-containers.h"
 
 namespace v8 {
 namespace internal {
-
-class TickCounter;
-
 namespace compiler {
 
 // Forward declarations.
@@ -22,13 +18,11 @@ class Graph;
 class MachineOperatorBuilder;
 class Node;
 
-class V8_EXPORT_PRIVATE ControlFlowOptimizer final {
+
+class ControlFlowOptimizer final {
  public:
   ControlFlowOptimizer(Graph* graph, CommonOperatorBuilder* common,
-                       MachineOperatorBuilder* machine,
-                       TickCounter* tick_counter, Zone* zone);
-  ControlFlowOptimizer(const ControlFlowOptimizer&) = delete;
-  ControlFlowOptimizer& operator=(const ControlFlowOptimizer&) = delete;
+                       MachineOperatorBuilder* machine, Zone* zone);
 
   void Optimize();
 
@@ -51,7 +45,8 @@ class V8_EXPORT_PRIVATE ControlFlowOptimizer final {
   ZoneQueue<Node*> queue_;
   NodeMarker<bool> queued_;
   Zone* const zone_;
-  TickCounter* const tick_counter_;
+
+  DISALLOW_COPY_AND_ASSIGN(ControlFlowOptimizer);
 };
 
 }  // namespace compiler

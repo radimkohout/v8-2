@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 #include "src/compiler/opcodes.h"
-#include "testing/gtest-support.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 namespace v8 {
 namespace internal {
@@ -40,7 +40,7 @@ bool IsControlOpcode(IrOpcode::Value opcode) {
 
 bool IsJsOpcode(IrOpcode::Value opcode) {
   switch (opcode) {
-#define OPCODE(Opcode, ...) \
+#define OPCODE(Opcode)      \
   case IrOpcode::k##Opcode: \
     return true;
     JS_OP_LIST(OPCODE)
@@ -66,7 +66,7 @@ bool IsConstantOpcode(IrOpcode::Value opcode) {
 
 bool IsComparisonOpcode(IrOpcode::Value opcode) {
   switch (opcode) {
-#define OPCODE(Opcode, ...) \
+#define OPCODE(Opcode)      \
   case IrOpcode::k##Opcode: \
     return true;
     JS_COMPARE_BINOP_LIST(OPCODE)
@@ -78,54 +78,68 @@ bool IsComparisonOpcode(IrOpcode::Value opcode) {
   }
 }
 
-char const* const kMnemonics[] = {
-#define OPCODE(Opcode, ...) #Opcode,
-    ALL_OP_LIST(OPCODE)
-#undef OPCODE
-};
 
-const IrOpcode::Value kOpcodes[] = {
-#define OPCODE(Opcode, ...) IrOpcode::k##Opcode,
-    ALL_OP_LIST(OPCODE)
-#undef OPCODE
-};
+const IrOpcode::Value kInvalidOpcode = static_cast<IrOpcode::Value>(123456789);
 
 }  // namespace
 
+
 TEST(IrOpcodeTest, IsCommonOpcode) {
-  TRACED_FOREACH(IrOpcode::Value, opcode, kOpcodes) {
-    EXPECT_EQ(IsCommonOpcode(opcode), IrOpcode::IsCommonOpcode(opcode));
-  }
+  EXPECT_FALSE(IrOpcode::IsCommonOpcode(kInvalidOpcode));
+#define OPCODE(Opcode)                           \
+  EXPECT_EQ(IsCommonOpcode(IrOpcode::k##Opcode), \
+            IrOpcode::IsCommonOpcode(IrOpcode::k##Opcode));
+  ALL_OP_LIST(OPCODE)
+#undef OPCODE
 }
+
 
 TEST(IrOpcodeTest, IsControlOpcode) {
-  TRACED_FOREACH(IrOpcode::Value, opcode, kOpcodes) {
-    EXPECT_EQ(IsControlOpcode(opcode), IrOpcode::IsControlOpcode(opcode));
-  }
+  EXPECT_FALSE(IrOpcode::IsControlOpcode(kInvalidOpcode));
+#define OPCODE(Opcode)                            \
+  EXPECT_EQ(IsControlOpcode(IrOpcode::k##Opcode), \
+            IrOpcode::IsControlOpcode(IrOpcode::k##Opcode));
+  ALL_OP_LIST(OPCODE)
+#undef OPCODE
 }
+
 
 TEST(IrOpcodeTest, IsJsOpcode) {
-  TRACED_FOREACH(IrOpcode::Value, opcode, kOpcodes) {
-    EXPECT_EQ(IsJsOpcode(opcode), IrOpcode::IsJsOpcode(opcode));
-  }
+  EXPECT_FALSE(IrOpcode::IsJsOpcode(kInvalidOpcode));
+#define OPCODE(Opcode)                       \
+  EXPECT_EQ(IsJsOpcode(IrOpcode::k##Opcode), \
+            IrOpcode::IsJsOpcode(IrOpcode::k##Opcode));
+  ALL_OP_LIST(OPCODE)
+#undef OPCODE
 }
+
 
 TEST(IrOpcodeTest, IsConstantOpcode) {
-  TRACED_FOREACH(IrOpcode::Value, opcode, kOpcodes) {
-    EXPECT_EQ(IsConstantOpcode(opcode), IrOpcode::IsConstantOpcode(opcode));
-  }
+  EXPECT_FALSE(IrOpcode::IsConstantOpcode(kInvalidOpcode));
+#define OPCODE(Opcode)                             \
+  EXPECT_EQ(IsConstantOpcode(IrOpcode::k##Opcode), \
+            IrOpcode::IsConstantOpcode(IrOpcode::k##Opcode));
+  ALL_OP_LIST(OPCODE)
+#undef OPCODE
 }
+
 
 TEST(IrOpcodeTest, IsComparisonOpcode) {
-  TRACED_FOREACH(IrOpcode::Value, opcode, kOpcodes) {
-    EXPECT_EQ(IsComparisonOpcode(opcode), IrOpcode::IsComparisonOpcode(opcode));
-  }
+  EXPECT_FALSE(IrOpcode::IsComparisonOpcode(kInvalidOpcode));
+#define OPCODE(Opcode)                               \
+  EXPECT_EQ(IsComparisonOpcode(IrOpcode::k##Opcode), \
+            IrOpcode::IsComparisonOpcode(IrOpcode::k##Opcode));
+  ALL_OP_LIST(OPCODE)
+#undef OPCODE
 }
 
+
 TEST(IrOpcodeTest, Mnemonic) {
-  TRACED_FOREACH(IrOpcode::Value, opcode, kOpcodes) {
-    EXPECT_STREQ(kMnemonics[opcode], IrOpcode::Mnemonic(opcode));
-  }
+  EXPECT_STREQ("UnknownOpcode", IrOpcode::Mnemonic(kInvalidOpcode));
+#define OPCODE(Opcode) \
+  EXPECT_STREQ(#Opcode, IrOpcode::Mnemonic(IrOpcode::k##Opcode));
+  ALL_OP_LIST(OPCODE)
+#undef OPCODE
 }
 
 }  // namespace compiler

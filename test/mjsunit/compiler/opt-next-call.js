@@ -2,13 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --allow-natives-syntax --opt
+// Flags: --allow-natives-syntax
 
 function foo() {
   return "fooed";
 }
 
-%PrepareFunctionForOptimization(foo);
 %OptimizeFunctionOnNextCall(foo);
 assertEquals("fooed", foo());
 assertOptimized(foo);
@@ -17,7 +16,6 @@ function bar() {
   return "bared";
 }
 
-%PrepareFunctionForOptimization(bar);
 assertEquals("bared", bar());
 %OptimizeFunctionOnNextCall(bar);
 assertEquals("bared", bar());

@@ -28,32 +28,31 @@
 
 #include <stdlib.h>
 
-#include "src/init/v8.h"
+#include "src/v8.h"
 
-#include "src/codegen/macro-assembler.h"
 #include "src/debug/debug.h"
-#include "src/diagnostics/disasm.h"
-#include "src/diagnostics/disassembler.h"
-#include "src/execution/frames-inl.h"
+#include "src/disasm.h"
+#include "src/disassembler.h"
+#include "src/macro-assembler.h"
 #include "test/cctest/cctest.h"
 
-namespace v8 {
-namespace internal {
+using namespace v8::internal;
+
 
 bool DisassembleAndCompare(byte* pc, const char* compare_string) {
   disasm::NameConverter converter;
   disasm::Disassembler disasm(converter);
-  base::EmbeddedVector<char, 128> disasm_buffer;
+  EmbeddedVector<char, 128> disasm_buffer;
 
   disasm.InstructionDecode(disasm_buffer, pc);
 
-  if (strcmp(compare_string, disasm_buffer.begin()) != 0) {
+  if (strcmp(compare_string, disasm_buffer.start()) != 0) {
     fprintf(stderr,
             "expected: \n"
             "%s\n"
             "disassembled: \n"
             "%s\n\n",
-            compare_string, disasm_buffer.begin());
+            compare_string, disasm_buffer.start());
     return false;
   }
   return true;
@@ -67,10 +66,10 @@ bool DisassembleAndCompare(byte* pc, const char* compare_string) {
   CcTest::InitializeVM();                                   \
   Isolate* isolate = CcTest::i_isolate();                   \
   HandleScope scope(isolate);                               \
-  byte* buffer = reinterpret_cast<byte*>(malloc(4 * 1024));  \
-  Assembler assm(AssemblerOptions{},                         \
-                 ExternalAssemblerBuffer(buffer, 4 * 1024)); \
+  byte* buffer = reinterpret_cast<byte*>(malloc(4 * 1024)); \
+  Assembler assm(isolate, buffer, 4 * 1024);                \
   bool failure = false;
+
 
 // This macro assembles one instruction using the preallocated assembler and
 // disassembles the generated instruction, comparing the output to the expected
@@ -90,9 +89,9 @@ bool DisassembleAndCompare(byte* pc, const char* compare_string) {
 
 // Verify that all invocations of the COMPARE macro passed successfully.
 // Exit with a failure if at least one of the tests failed.
-#define VERIFY_RUN()                           \
-  if (failure) {                               \
-    FATAL("PPC Disassembler tests failed.\n"); \
+#define VERIFY_RUN()                                                  \
+  if (failure) {                                                      \
+    V8_Fatal(__FILE__, __LINE__, "PPC Disassembler tests failed.\n"); \
   }
 
 TEST(DisasmPPC) {
@@ -153,6 +152,3 @@ TEST(DisasmPPC) {
 
   VERIFY_RUN();
 }
-
-}  // namespace internal
-}  // namespace v8

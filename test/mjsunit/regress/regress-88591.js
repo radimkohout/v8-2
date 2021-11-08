@@ -25,6 +25,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Flags: --legacy-const
+
 // Regression test for a crash.  A data property in the global object's
 // prototype shadowed by a setter in the global object's prototype's
 // prototype would crash or assert when seen by Runtime_DeclareContextSlot.
@@ -34,9 +36,9 @@ Object.prototype.__defineGetter__('x', function () { return 0; });
 
 this.__proto__ = { x: 1 };
 
-try { fail; } catch (e) { eval('var x = 2'); }
+try { fail; } catch (e) { eval('const x = 2'); }
 
 var o = Object.getOwnPropertyDescriptor(this, 'x');
 assertFalse(called);
 assertEquals(2, o.value);
-assertEquals(true, o.writable);
+assertEquals(false, o.writable);

@@ -3,6 +3,6 @@
 // found in the LICENSE file.
 
 if (this.Worker) {
-  var __v_7 = new Worker('onmessage = function() {}', {type: 'string'});
+  var __v_7 = new Worker('onmessage = function() {}');
   __v_7.postMessage("");
 }

@@ -147,11 +147,11 @@ function foo(eval) {\
 })();
 
 // Octal literal
-CheckStrictMode("var x = 012", SyntaxError);
-CheckStrictMode("012", SyntaxError);
-CheckStrictMode("'Hello octal\\032'", SyntaxError);
-CheckStrictMode("function octal() { return 012; }", SyntaxError);
-CheckStrictMode("function octal() { return '\\032'; }", SyntaxError);
+CheckStrictMode("var x = 012");
+CheckStrictMode("012");
+CheckStrictMode("'Hello octal\\032'");
+CheckStrictMode("function octal() { return 012; }");
+CheckStrictMode("function octal() { return '\\032'; }");
 
 (function ValidEscape() {
   "use strict";
@@ -1111,14 +1111,14 @@ function CheckArgumentsPillDescriptor(func, name) {
   }
 
   var args = strict();
-  assertEquals(undefined, Object.getOwnPropertyDescriptor(args, "caller"));
+  CheckArgumentsPillDescriptor(args, "caller");
   CheckArgumentsPillDescriptor(args, "callee");
 
   args = strict(17, "value", strict);
   assertEquals(17, args[0])
   assertEquals("value", args[1])
   assertEquals(strict, args[2]);
-  assertEquals(undefined, Object.getOwnPropertyDescriptor(args, "caller"));
+  CheckArgumentsPillDescriptor(args, "caller");
   CheckArgumentsPillDescriptor(args, "callee");
 
   function outer() {
@@ -1130,14 +1130,14 @@ function CheckArgumentsPillDescriptor(func, name) {
   }
 
   var args = outer()();
-  assertEquals(undefined, Object.getOwnPropertyDescriptor(args, "caller"));
+  CheckArgumentsPillDescriptor(args, "caller");
   CheckArgumentsPillDescriptor(args, "callee");
 
   args = outer()(17, "value", strict);
   assertEquals(17, args[0])
   assertEquals("value", args[1])
   assertEquals(strict, args[2]);
-  assertEquals(undefined, Object.getOwnPropertyDescriptor(args, "caller"));
+  CheckArgumentsPillDescriptor(args, "caller");
   CheckArgumentsPillDescriptor(args, "callee");
 })();
 
@@ -1149,7 +1149,7 @@ function CheckArgumentsPillDescriptor(func, name) {
 
   function strict() {
     "use strict";
-    // Returning result via local variable to avoid tail call elimination.
+    // Returning result via local variable to avoid tail call optimization.
     var res = return_my_caller();
     return res;
   }
@@ -1165,7 +1165,7 @@ function CheckArgumentsPillDescriptor(func, name) {
 (function TestNonStrictFunctionCallerPill() {
   function strict(n) {
     "use strict";
-    // Returning result via local variable to avoid tail call elimination.
+    // Returning result via local variable to avoid tail call optimization.
     var res = non_strict(n);
     return res;
   }
@@ -1195,7 +1195,7 @@ function CheckArgumentsPillDescriptor(func, name) {
 (function TestNonStrictFunctionCallerDescriptorPill() {
   function strict(n) {
     "use strict";
-    // Returning result via local variable to avoid tail call elimination.
+    // Returning result via local variable to avoid tail call optimization.
     var res = non_strict(n);
     return res;
   }

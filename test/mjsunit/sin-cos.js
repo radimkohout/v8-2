@@ -27,7 +27,7 @@
 
 // Test Math.sin and Math.cos.
 
-// Flags: --allow-natives-syntax --opt
+// Flags: --allow-natives-syntax
 
 assertEquals("-Infinity", String(1/Math.sin(-0)));
 assertEquals(1, Math.cos(-0));
@@ -38,7 +38,6 @@ function no_deopt_on_minus_zero(x) {
   return Math.sin(x) + Math.cos(x) + Math.tan(x);
 }
 
-%PrepareFunctionForOptimization(no_deopt_on_minus_zero);
 no_deopt_on_minus_zero(1);
 no_deopt_on_minus_zero(1);
 %OptimizeFunctionOnNextCall(no_deopt_on_minus_zero);

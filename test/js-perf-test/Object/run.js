@@ -3,12 +3,8 @@
 // found in the LICENSE file.
 
 
-d8.file.execute('../base.js');
-
-d8.file.execute('assign.js');
-d8.file.execute('create.js');
-d8.file.execute('entries.js');
-d8.file.execute('values.js');
+load('../base.js');
+load('assign.js');
 
 var success = true;
 

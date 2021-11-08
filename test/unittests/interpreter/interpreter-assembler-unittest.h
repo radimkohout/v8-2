@@ -5,7 +5,6 @@
 #ifndef V8_UNITTESTS_INTERPRETER_INTERPRETER_ASSEMBLER_UNITTEST_H_
 #define V8_UNITTESTS_INTERPRETER_INTERPRETER_ASSEMBLER_UNITTEST_H_
 
-#include "src/compiler/code-assembler.h"
 #include "src/compiler/machine-operator.h"
 #include "src/interpreter/interpreter-assembler.h"
 #include "test/unittests/test-utils.h"
@@ -14,39 +13,22 @@
 namespace v8 {
 namespace internal {
 namespace interpreter {
-namespace interpreter_assembler_unittest {
 
 using ::testing::Matcher;
 
-class InterpreterAssemblerTest;
-
-class InterpreterAssemblerTestState : public compiler::CodeAssemblerState {
- public:
-  InterpreterAssemblerTestState(InterpreterAssemblerTest* test,
-                                Bytecode bytecode);
-};
-
 class InterpreterAssemblerTest : public TestWithIsolateAndZone {
  public:
-  InterpreterAssemblerTest() : TestWithIsolateAndZone(kCompressGraphZone) {}
-  ~InterpreterAssemblerTest() override = default;
+  InterpreterAssemblerTest() {}
+  ~InterpreterAssemblerTest() override {}
 
   class InterpreterAssemblerForTest final : public InterpreterAssembler {
    public:
-    InterpreterAssemblerForTest(
-        InterpreterAssemblerTestState* state, Bytecode bytecode,
-        OperandScale operand_scale = OperandScale::kSingle)
-        : InterpreterAssembler(state, bytecode, operand_scale) {}
-    ~InterpreterAssemblerForTest();
-    InterpreterAssemblerForTest(const InterpreterAssemblerForTest&) = delete;
-    InterpreterAssemblerForTest& operator=(const InterpreterAssemblerForTest&) =
-        delete;
+    InterpreterAssemblerForTest(InterpreterAssemblerTest* test,
+                                Bytecode bytecode)
+        : InterpreterAssembler(test->isolate(), test->zone(), bytecode) {}
+    ~InterpreterAssemblerForTest() override {}
 
     Matcher<compiler::Node*> IsLoad(
-        const Matcher<compiler::LoadRepresentation>& rep_matcher,
-        const Matcher<compiler::Node*>& base_matcher,
-        const Matcher<compiler::Node*>& index_matcher);
-    Matcher<compiler::Node*> IsLoadFromObject(
         const Matcher<compiler::LoadRepresentation>& rep_matcher,
         const Matcher<compiler::Node*>& base_matcher,
         const Matcher<compiler::Node*>& index_matcher);
@@ -56,27 +38,18 @@ class InterpreterAssemblerTest : public TestWithIsolateAndZone {
         const Matcher<compiler::Node*>& index_matcher,
         const Matcher<compiler::Node*>& value_matcher);
 
-    Matcher<compiler::Node*> IsWordNot(
-        const Matcher<compiler::Node*>& value_matcher);
+    Matcher<compiler::Node*> IsBytecodeOperand(int offset);
+    Matcher<compiler::Node*> IsBytecodeOperandSignExtended(int offset);
+    Matcher<compiler::Node*> IsBytecodeOperandShort(int offset);
+    Matcher<compiler::Node*> IsBytecodeOperandShortSignExtended(int offset);
 
-    Matcher<compiler::Node*> IsUnsignedByteOperand(int offset);
-    Matcher<compiler::Node*> IsSignedByteOperand(int offset);
-    Matcher<compiler::Node*> IsUnsignedShortOperand(int offset);
-    Matcher<compiler::Node*> IsSignedShortOperand(int offset);
-    Matcher<compiler::Node*> IsUnsignedQuadOperand(int offset);
-    Matcher<compiler::Node*> IsSignedQuadOperand(int offset);
+    using InterpreterAssembler::graph;
 
-    Matcher<compiler::Node*> IsSignedOperand(int offset,
-                                             OperandSize operand_size);
-    Matcher<compiler::Node*> IsUnsignedOperand(int offset,
-                                               OperandSize operand_size);
-
-    Matcher<compiler::Node*> IsLoadRegisterOperand(int offset,
-                                                   OperandSize operand_size);
+   private:
+    DISALLOW_COPY_AND_ASSIGN(InterpreterAssemblerForTest);
   };
 };
 
-}  // namespace interpreter_assembler_unittest
 }  // namespace interpreter
 }  // namespace internal
 }  // namespace v8

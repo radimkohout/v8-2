@@ -4,20 +4,20 @@
 
 #include <vector>
 
-#include "src/common/globals.h"
-#include "src/heap/heap-inl.h"
+#include "src/globals.h"
+#include "src/heap/heap.h"
+#include "src/heap/spaces.h"
 #include "src/heap/spaces-inl.h"
-#include "src/objects/objects.h"
 #include "test/cctest/cctest.h"
 
 namespace v8 {
 namespace internal {
-namespace heap {
 
 static Address AllocateLabBackingStore(Heap* heap, intptr_t size_in_bytes) {
   AllocationResult result = heap->old_space()->AllocateRaw(
       static_cast<int>(size_in_bytes), kDoubleAligned);
-  Address adr = result.ToObjectChecked().address();
+  Object* obj = result.ToObjectChecked();
+  Address adr = HeapObject::cast(obj)->address();
   return adr;
 }
 
@@ -25,15 +25,15 @@ static Address AllocateLabBackingStore(Heap* heap, intptr_t size_in_bytes) {
 static void VerifyIterable(v8::internal::Address base,
                            v8::internal::Address limit,
                            std::vector<intptr_t> expected_size) {
-  CHECK_LE(base, limit);
-  HeapObject object;
+  CHECK_LE(reinterpret_cast<intptr_t>(base), reinterpret_cast<intptr_t>(limit));
+  HeapObject* object = nullptr;
   size_t counter = 0;
   while (base < limit) {
     object = HeapObject::FromAddress(base);
-    CHECK(object.IsFreeSpaceOrFiller());
+    CHECK(object->IsFiller());
     CHECK_LT(counter, expected_size.size());
-    CHECK_EQ(expected_size[counter], object.Size());
-    base += object.Size();
+    CHECK_EQ(expected_size[counter], object->Size());
+    base += object->Size();
     counter++;
   }
 }
@@ -42,12 +42,11 @@ static void VerifyIterable(v8::internal::Address base,
 static bool AllocateFromLab(Heap* heap, LocalAllocationBuffer* lab,
                             intptr_t size_in_bytes,
                             AllocationAlignment alignment = kWordAligned) {
-  HeapObject obj;
+  HeapObject* obj;
   AllocationResult result =
       lab->AllocateRawAligned(static_cast<int>(size_in_bytes), alignment);
   if (result.To(&obj)) {
-    heap->CreateFillerObjectAt(obj.address(), static_cast<int>(size_in_bytes),
-                               ClearRecordedSlots::kNo);
+    heap->CreateFillerObjectAt(obj->address(), static_cast<int>(size_in_bytes));
     return true;
   }
   return false;
@@ -63,6 +62,7 @@ TEST(InvalidLab) {
 TEST(UnusedLabImplicitClose) {
   CcTest::InitializeVM();
   Heap* heap = CcTest::heap();
+  heap->root(Heap::kOnePointerFillerMapRootIndex);
   const int kLabSize = 4 * KB;
   Address base = AllocateLabBackingStore(heap, kLabSize);
   Address limit = base + kLabSize;
@@ -95,8 +95,11 @@ TEST(SimpleAllocate) {
     LocalAllocationBuffer lab =
         LocalAllocationBuffer::FromResult(heap, lab_backing_store, kLabSize);
     CHECK(lab.IsValid());
+    intptr_t sum = 0;
     for (auto size : sizes) {
-      AllocateFromLab(heap, &lab, size);
+      if (AllocateFromLab(heap, &lab, size)) {
+        sum += size;
+      }
     }
   }
   VerifyIterable(base, limit, expected_sizes);
@@ -166,7 +169,7 @@ TEST(MergeSuccessful) {
   CcTest::InitializeVM();
   Heap* heap = CcTest::heap();
   const int kLabSize = 2 * KB;
-  Address base1 = AllocateLabBackingStore(heap, 2 * kLabSize);
+  Address base1 = AllocateLabBackingStore(heap, kLabSize);
   Address limit1 = base1 + kLabSize;
   Address base2 = limit1;
   Address limit2 = base2 + kLabSize;
@@ -222,7 +225,7 @@ TEST(MergeFailed) {
   CcTest::InitializeVM();
   Heap* heap = CcTest::heap();
   const int kLabSize = 2 * KB;
-  Address base1 = AllocateLabBackingStore(heap, 3 * kLabSize);
+  Address base1 = AllocateLabBackingStore(heap, kLabSize);
   Address base2 = base1 + kLabSize;
   Address base3 = base2 + kLabSize;
 
@@ -277,6 +280,5 @@ TEST(AllocateAligned) {
 }
 #endif  // V8_HOST_ARCH_32_BIT
 
-}  // namespace heap
 }  // namespace internal
 }  // namespace v8

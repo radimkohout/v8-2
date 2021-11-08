@@ -2,16 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --allow-natives-syntax
+// Flags: --fold-constants --allow-natives-syntax
 
 function bar(obj) {
   assertTrue(obj.x === 'baz');
 }
 
 function foo() {
-  bar({x: 'baz'});
-};
-%PrepareFunctionForOptimization(foo);
+  bar({ x : 'baz' });
+}
+
 foo();
 foo();
 %OptimizeFunctionOnNextCall(foo);

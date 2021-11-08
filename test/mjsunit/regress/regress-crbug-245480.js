@@ -28,7 +28,7 @@
 // Flags: --allow-natives-syntax --expose-gc --noalways-opt
 
 function isHoley(obj) {
-  if (%HasHoleyElements(obj)) return true;
+  if (%HasFastHoleyElements(obj)) return true;
   return false;
 }
 
@@ -36,12 +36,16 @@ function assertHoley(obj, name_opt) {
   assertEquals(true, isHoley(obj), name_opt);
 }
 
+function assertNotHoley(obj, name_opt) {
+  assertEquals(false, isHoley(obj), name_opt);
+}
+
 function create_array(arg) {
   return new Array(arg);
-};
-%PrepareFunctionForOptimization(create_array);
+}
+
 obj = create_array(0);
-assertHoley(obj);
+assertNotHoley(obj);
 create_array(0);
 %OptimizeFunctionOnNextCall(create_array);
 obj = create_array(10);
@@ -49,9 +53,9 @@ assertHoley(obj);
 
 // The code below would assert in debug or crash in release
 function f(length) {
-  return new Array(length);
-};
-%PrepareFunctionForOptimization(f);
+  return new Array(length)
+}
+
 f(0);
 f(0);
 %OptimizeFunctionOnNextCall(f);

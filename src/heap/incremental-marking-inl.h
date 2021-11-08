@@ -7,49 +7,33 @@
 
 #include "src/heap/incremental-marking.h"
 
-#include "src/execution/isolate.h"
-#include "src/heap/mark-compact-inl.h"
-#include "src/objects/maybe-object.h"
-#include "src/objects/objects-inl.h"
-
 namespace v8 {
 namespace internal {
 
-void IncrementalMarking::TransferColor(HeapObject from, HeapObject to) {
-  if (atomic_marking_state()->IsBlack(to)) {
-    DCHECK(black_allocation());
-    return;
-  }
 
-  DCHECK(atomic_marking_state()->IsWhite(to));
-  if (atomic_marking_state()->IsGrey(from)) {
-    bool success = atomic_marking_state()->WhiteToGrey(to);
-    DCHECK(success);
-    USE(success);
-  } else if (atomic_marking_state()->IsBlack(from)) {
-    bool success = atomic_marking_state()->WhiteToBlack(to);
-    DCHECK(success);
-    USE(success);
+void IncrementalMarking::RecordWrite(HeapObject* obj, Object** slot,
+                                     Object* value) {
+  if (IsMarking() && value->IsHeapObject()) {
+    RecordWriteSlow(obj, slot, value);
   }
 }
 
-bool IncrementalMarking::WhiteToGreyAndPush(HeapObject obj) {
-  if (marking_state()->WhiteToGrey(obj)) {
-    local_marking_worklists()->Push(obj);
-    return true;
+
+void IncrementalMarking::RecordWriteOfCodeEntry(JSFunction* host, Object** slot,
+                                                Code* value) {
+  if (IsMarking()) {
+    RecordWriteOfCodeEntrySlow(host, slot, value);
   }
-  return false;
 }
 
-void IncrementalMarking::RestartIfNotMarking() {
-  if (state_ == COMPLETE) {
-    state_ = MARKING;
-    if (FLAG_trace_incremental_marking) {
-      heap()->isolate()->PrintWithTimestamp(
-          "[IncrementalMarking] Restarting (new grey objects)\n");
-    }
+
+void IncrementalMarking::RecordWriteIntoCode(HeapObject* obj, RelocInfo* rinfo,
+                                             Object* value) {
+  if (IsMarking() && value->IsHeapObject()) {
+    RecordWriteIntoCodeSlow(obj, rinfo, value);
   }
 }
+
 
 }  // namespace internal
 }  // namespace v8

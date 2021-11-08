@@ -42,7 +42,6 @@ A.prototype.g = gee;
 
 var o = new A();
 
-%PrepareFunctionForOptimization(o.g);
 for (var i=0; i<5; i++) {
   o.g(i);
 }
@@ -57,7 +56,6 @@ function hej(x) {
   return o.g(x);
 }
 
-%PrepareFunctionForOptimization(hej);
 for (var j=0; j<5; j++) {
   hej(j);
 }
@@ -72,7 +70,6 @@ function from_eval(x) {
   return o.g(x);
 }
 
-%PrepareFunctionForOptimization(from_eval);
 for (var j=0; j<5; j++) {
   from_eval(j);
 }

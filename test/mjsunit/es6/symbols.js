@@ -25,7 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --expose-gc --allow-natives-syntax
+// Flags: --expose-gc --allow-natives-syntax --harmony-tostring
 
 var symbols = []
 
@@ -44,7 +44,6 @@ function TestNew() {
   function indirectSymbol() { return Symbol() }
   function indirect() { return indirectSymbol() }
   for (var i = 0; i < 2; ++i) {
-    %PrepareFunctionForOptimization(indirect);
     for (var j = 0; j < 5; ++j) {
       symbols.push(Symbol())
       symbols.push(Symbol(undefined))
@@ -68,6 +67,8 @@ function TestType() {
     assertEquals("symbol", typeof symbols[i])
     assertTrue(typeof symbols[i] === "symbol")
     assertFalse(%SymbolIsPrivate(symbols[i]))
+    assertEquals(null, %_ClassOf(symbols[i]))
+    assertEquals("Symbol", %_ClassOf(Object(symbols[i])))
   }
 }
 TestType()
@@ -85,7 +86,6 @@ TestPrototype()
 
 
 function TestConstructor() {
-  assertEquals(0, Symbol.length);
   assertSame(Function.prototype, Symbol.__proto__)
   assertFalse(Object === Symbol.prototype.constructor)
   assertFalse(Symbol === Object.prototype.constructor)
@@ -352,7 +352,7 @@ function TestKeyDelete(obj) {
 }
 
 
-var objs = [{}, [], Object.create({}), Object(1), new Map, function(){}]
+var objs = [{}, [], Object.create(null), Object(1), new Map, function(){}]
 
 for (var i in objs) {
   var obj = objs[i]
@@ -520,7 +520,6 @@ function TestComparison() {
   var throwFuncs = [lt, gt, le, ge, lt_same, gt_same, le_same, ge_same];
 
   for (var f of throwFuncs) {
-    %PrepareFunctionForOptimization(f);
     assertThrows(f, TypeError);
     %OptimizeFunctionOnNextCall(f);
     assertThrows(f, TypeError);
@@ -555,9 +554,7 @@ TestContext();
 
 function TestStringify(expected, input) {
   assertEquals(expected, JSON.stringify(input));
-  assertEquals(expected, JSON.stringify(input, (key, value) => value));
-  assertEquals(JSON.stringify(input, null, "="),
-               JSON.stringify(input, (key, value) => value, "="));
+  assertEquals(expected, JSON.stringify(input, null, 0));
 }
 
 TestStringify(undefined, Symbol("a"));

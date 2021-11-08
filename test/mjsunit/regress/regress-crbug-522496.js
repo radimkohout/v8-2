@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 if (this.Worker) {
-  var worker = new Worker("onmessage = function(){}", {type: 'string'});
+  var worker = new Worker("onmessage = function(){}");
   var buf = new ArrayBuffer();
   worker.postMessage(buf, [buf]);
 }

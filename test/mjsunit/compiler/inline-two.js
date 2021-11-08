@@ -41,7 +41,6 @@ function TestInlineX(o) {
   }
 }
 
-%PrepareFunctionForOptimization(TestInlineX);
 var o2 = {};
 o2.size = function() { return 42; }
 o2.g = function() { return this.size(); };
@@ -65,7 +64,6 @@ function TestInlineX2(o) {
   }
 }
 
-%PrepareFunctionForOptimization(TestInlineX2);
 var obj = {}
 obj.foo = function() { return 42; }
 var o3 = {};
@@ -91,7 +89,6 @@ function TestInlineFG(o) {
   }
 }
 
-%PrepareFunctionForOptimization(TestInlineFG);
 var obj = {}
 obj.g = function() { return 42; }
 var o3 = {};

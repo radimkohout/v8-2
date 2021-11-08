@@ -4,29 +4,63 @@
 
 // Flags: --expose-wasm --expose-gc --allow-natives-syntax
 
-d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
+load("test/mjsunit/wasm/wasm-constants.js");
 
-var assertTraps = function(messageId, code) {
-  assertThrows(code, WebAssembly.RuntimeError, kTrapMsgs[messageId]);
+function assertTraps(code, msg) {
+  var threwException = true;
+  try {
+    if (typeof code === 'function') {
+      code();
+    } else {
+      eval(code);
+    }
+    threwException = false;
+  } catch (e) {
+    if (typeof type_opt === 'function') {
+      assertInstanceof(e, type_opt);
+    }
+    if (arguments.length >= 3) {
+      assertEquals(e.type, cause_opt);
+    }
+    // Success.
+    return;
+  }
+  throw new MjsUnitAssertionError("Did not throw exception");
 }
 
 
-function makeBinop(opcode) {
-  var builder = new WasmModuleBuilder();
+function makeDivRem(opcode) {
+  var kBodySize = 5;
+  var kNameMainOffset = 6 + 11 + kBodySize + 1;
 
-  builder.addFunction("main", kSig_i_ii)
-    .addBody([
-      kExprLocalGet, 0,           // --
-      kExprLocalGet, 1,           // --
-      opcode,                     // --
-    ])
-    .exportFunc();
+  var data = bytes(
+    // signatures
+    kDeclSignatures, 1,
+    2, kAstI32, kAstI32, kAstI32, // (int,int) -> int
+    // -- main function
+    kDeclFunctions, 1,
+    kDeclFunctionName | kDeclFunctionExport,
+    0, 0,
+    kNameMainOffset, 0, 0, 0,   // name offset
+    kBodySize, 0,
+    // main body
+    opcode,                     // --
+    kExprGetLocal, 0,           // --
+    kExprGetLocal, 1,           // --
+    // names
+    kDeclEnd,
+    'm', 'a', 'i', 'n', 0       //  --
+  );
 
-  return builder.instantiate().exports.main;
+  var module = _WASMEXP_.instantiateModule(data);
+
+  assertEquals("function", typeof module.main);
+
+  return module.main;
 }
 
-var divs = makeBinop(kExprI32DivS);
-var divu = makeBinop(kExprI32DivU);
+var divs = makeDivRem(kExprI32DivS);
+var divu = makeDivRem(kExprI32DivU);
 
 assertEquals( 33, divs( 333, 10));
 assertEquals(-33, divs(-336, 10));
@@ -44,8 +78,8 @@ assertTraps(kTrapDivUnrepresentable, "divs(0x80000000, -1)");
 assertEquals(0, divu(0x80000000, -1));
 
 
-var rems = makeBinop(kExprI32RemS);
-var remu = makeBinop(kExprI32RemU);
+var rems = makeDivRem(kExprI32RemS);
+var remu = makeDivRem(kExprI32RemU);
 
 assertEquals( 3, rems( 333, 10));
 assertEquals(-6, rems(-336, 10));

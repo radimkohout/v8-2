@@ -25,7 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --allow-natives-syntax
+// Flags: --allow-natives-syntax --max-opt-count=100
 
 function A() {
 }
@@ -46,7 +46,6 @@ A.prototype.Z = function () {
 };
 
 var a = new A();
-%PrepareFunctionForOptimization(a.Z);
 a.Z(4,5,6);
 a.Z(4,5,6);
 %OptimizeFunctionOnNextCall(a.Z);
@@ -76,7 +75,6 @@ function F4() {
   return F31(1);
 }
 
-%PrepareFunctionForOptimization(F4);
 F4(1);
 F4(1);
 F4(1);
@@ -110,7 +108,6 @@ F4(1);
     adapt4to2(1, 2, 3, 4);
   }
 
-  %PrepareFunctionForOptimization(test_adaptation);
   test_adaptation();
   test_adaptation();
   %OptimizeFunctionOnNextCall(test_adaptation);
@@ -149,7 +146,6 @@ function toarr2(marker, a, b, c) {
 
 function test_toarr(toarr) {
   var marker = { x: 0 };
-  %PrepareFunctionForOptimization(toarr);
   assertArrayEquals([3, 2, 1], toarr(marker, 2, 4, 6));
   assertArrayEquals([3, 2, 1], toarr(marker, 2, 4, 6));
   %OptimizeFunctionOnNextCall(toarr);
@@ -179,10 +175,7 @@ test_toarr(toarr2);
     return inner(x, y);
   }
 
-  %PrepareFunctionForOptimization(outer);
   %OptimizeFunctionOnNextCall(outer);
-  assertEquals(2, outer(1, 2));
-  %PrepareFunctionForOptimization(inner);
   %OptimizeFunctionOnNextCall(inner);
   assertEquals(2, outer(1, 2));
 })();
@@ -204,7 +197,6 @@ test_toarr(toarr2);
     return inner(x, y);
   }
 
-  %PrepareFunctionForOptimization(outer);
   assertEquals(2, outer(1, 2));
   assertEquals(2, outer(1, 2));
   assertEquals(2, outer(1, 2));
@@ -250,7 +242,6 @@ test_toarr(toarr2);
       }
     }
 
-    %PrepareFunctionForOptimization(outer);
     for (var step = 0; step < 4; step++) {
       if (outerCount == 1) outer(10);
       if (outerCount == 2) outer(10, 11);
@@ -262,9 +253,9 @@ test_toarr(toarr2);
     %DeoptimizeFunction(outer);
     %DeoptimizeFunction(middle);
     %DeoptimizeFunction(inner);
-    %ClearFunctionFeedback(outer);
-    %ClearFunctionFeedback(middle);
-    %ClearFunctionFeedback(inner);
+    %ClearFunctionTypeFeedback(outer);
+    %ClearFunctionTypeFeedback(middle);
+    %ClearFunctionTypeFeedback(inner);
   }
 
   for (var a = 1; a <= 3; a++) {
@@ -311,7 +302,6 @@ test_toarr(toarr2);
     );
   }
 
-  %PrepareFunctionForOptimization(outer);
   outer();
   outer();
   %OptimizeFunctionOnNextCall(outer);

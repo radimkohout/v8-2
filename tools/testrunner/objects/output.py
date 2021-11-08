@@ -27,28 +27,16 @@
 
 
 import signal
-import copy
 
 from ..local import utils
 
-
 class Output(object):
 
-  def __init__(self, exit_code=0, timed_out=False, stdout=None, stderr=None,
-               pid=None, duration=None):
+  def __init__(self, exit_code, timed_out, stdout, stderr):
     self.exit_code = exit_code
     self.timed_out = timed_out
     self.stdout = stdout
     self.stderr = stderr
-    self.pid = pid
-    self.duration = duration
-
-  def without_text(self):
-    """Returns copy of the output without stdout and stderr."""
-    other = copy.copy(self)
-    other.stdout = None
-    other.stderr = None
-    return other
 
   def HasCrashed(self):
     if utils.IsWindows():
@@ -63,19 +51,10 @@ class Output(object):
   def HasTimedOut(self):
     return self.timed_out
 
-  def IsSuccess(self):
-    return not self.HasCrashed() and not self.HasTimedOut()
+  def Pack(self):
+    return [self.exit_code, self.timed_out, self.stdout, self.stderr]
 
-  @property
-  def exit_code_string(self):
-    return "%d [%02X]" % (self.exit_code, self.exit_code & 0xffffffff)
-
-
-class _NullOutput(Output):
-  """Useful to signal that the binary has not been run."""
-  def __init__(self):
-    super(_NullOutput, self).__init__()
-
-
-# Default instance of the _NullOutput class above.
-NULL_OUTPUT = _NullOutput()
+  @staticmethod
+  def Unpack(packed):
+    # For the order of the fields, refer to Pack() above.
+    return Output(packed[0], packed[1], packed[2], packed[3])

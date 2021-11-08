@@ -234,9 +234,7 @@ TestInvalid('"Garbage""After string"');
 
 function TestStringify(expected, input) {
   assertEquals(expected, JSON.stringify(input));
-  assertEquals(expected, JSON.stringify(input, (key, value) => value));
-  assertEquals(JSON.stringify(input, null, "="),
-               JSON.stringify(input, (key, value) => value, "="));
+  assertEquals(expected, JSON.stringify(input, null, 0));
 }
 
 TestStringify("true", true);
@@ -327,7 +325,6 @@ assertEquals('{"x":5}', JSON.stringify({x:5,y:6}, ['x']));
 assertEquals('{\n "a": "b",\n "c": "d"\n}',
              JSON.stringify({a:"b",c:"d"}, null, 1));
 assertEquals('{"y":6,"x":5}', JSON.stringify({x:5,y:6}, ['y', 'x']));
-assertEquals('{"y":6,"x":5}', JSON.stringify({x:5,y:6}, ['y', 'x', 'x', 'y']));
 
 // toJSON get string keys.
 var checker = {};
@@ -375,28 +372,32 @@ var o = { toString: function() { return "42"; } };
 assertEquals(42, JSON.parse(o));
 
 
-for (var i = 0x0000; i <= 0xFFFF; i++) {
+for (var i = 0; i < 65536; i++) {
   var string = String.fromCharCode(i);
   var encoded = JSON.stringify(string);
-  var expected = 'uninitialized';
+  var expected = "uninitialized";
   // Following the ES5 specification of the abstraction function Quote.
   if (string == '"' || string == '\\') {
     // Step 2.a
     expected = '\\' + string;
-  } else if ("\b\t\n\r\f".includes(string)) {
+  } else if ("\b\t\n\r\f".indexOf(string) >= 0) {
     // Step 2.b
     if (string == '\b') expected = '\\b';
     else if (string == '\t') expected = '\\t';
     else if (string == '\n') expected = '\\n';
     else if (string == '\f') expected = '\\f';
     else if (string == '\r') expected = '\\r';
-  } else if (i < 0x20 || (i >= 0xD800 && i <= 0xDFFF)) {
+  } else if (i < 32) {
     // Step 2.c
-    expected = '\\u' + i.toString(16).padStart(4, '0');
+    if (i < 16) {
+      expected = "\\u000" + i.toString(16);
+    } else {
+      expected = "\\u00" + i.toString(16);
+    }
   } else {
     expected = string;
   }
-  assertEquals('"' + expected + '"', encoded, "code point " + i);
+  assertEquals('"' + expected + '"', encoded, "Codepoint " + i);
 }
 
 
@@ -450,8 +451,8 @@ var counter = { get toJSON() { getCount++;
 // RegExps are not callable, so they are stringified as objects.
 TestStringify('{}', /regexp/);
 TestStringify('42', counter);
-assertEquals(4, getCount);
-assertEquals(4, callCount);
+assertEquals(2, getCount);
+assertEquals(2, callCount);
 
 var oddball2 = Object(42);
 var oddball3 = Object("foo");
@@ -517,14 +518,3 @@ reviver = function(p, v) {
   return p === "" ? v : 42;
 }
 assertEquals({a: 0, b: 1}, JSON.parse('{"a":0,"b":1}', reviver));
-
-reviver = (k, v) => (v === Infinity) ? "inf" : v;
-assertEquals('{"":"inf"}', JSON.stringify({"":Infinity}, reviver));
-
-assertEquals([10.4, "\u1234"], JSON.parse("[10.4, \"\u1234\"]"));
-assertEquals(10, JSON.parse('{"10":10}')["10"]);
-
-assertEquals(`[
-          1,
-          2
-]`, JSON.stringify([1,2], undefined, 1000000000000000));

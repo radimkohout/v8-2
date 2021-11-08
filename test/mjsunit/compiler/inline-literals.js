@@ -43,7 +43,6 @@ function TestArrayLiteral(a, b, c) {
   assertEquals(expected, result, "TestArrayLiteral");
 }
 
-%PrepareFunctionForOptimization(TestArrayLiteral);
 TestArrayLiteral(1, 2, 3);
 TestArrayLiteral(1, 2, 3);
 %OptimizeFunctionOnNextCall(TestArrayLiteral);
@@ -64,7 +63,6 @@ function TestObjectLiteral(a, b, c) {
   assertEquals(expected, result, "TestObjectLiteral");
 }
 
-%PrepareFunctionForOptimization(TestObjectLiteral);
 TestObjectLiteral(1, 2, 3);
 TestObjectLiteral(1, 2, 3);
 %OptimizeFunctionOnNextCall(TestObjectLiteral);
@@ -84,7 +82,6 @@ function TestRegExpLiteral(s, x, y, expected) {
   assertEquals(expected, result, "TestRegExpLiteral");
 }
 
-%PrepareFunctionForOptimization(TestRegExpLiteral);
 TestRegExpLiteral("a-", "reg", "exp", "regexp-");
 TestRegExpLiteral("-b", "reg", "exp", "-expreg");
 %OptimizeFunctionOnNextCall(TestRegExpLiteral);
@@ -106,7 +103,6 @@ function TestFunctionLiteral(a, b, c, expected) {
   assertEquals(expected, result, "TestFunctionLiteral");
 }
 
-%PrepareFunctionForOptimization(TestFunctionLiteral);
 TestFunctionLiteral(1, 2, 3, 6);
 TestFunctionLiteral(4, 5, 6, 15);
 %OptimizeFunctionOnNextCall(TestFunctionLiteral);

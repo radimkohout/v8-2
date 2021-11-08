@@ -3,8 +3,9 @@
 // found in the LICENSE file.
 
 
-d8.file.execute('../base.js');
-d8.file.execute(arguments[0] + '.js');
+load('../base.js');
+load('harmony-string.js');
+
 
 var success = true;
 
@@ -17,6 +18,7 @@ function PrintError(name, error) {
   PrintResult(name, error);
   success = false;
 }
+
 
 BenchmarkSuite.config.doWarmup = undefined;
 BenchmarkSuite.config.doDeterministic = undefined;

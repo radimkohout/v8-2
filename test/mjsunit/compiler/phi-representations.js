@@ -36,7 +36,6 @@ function ar() {
   return (r - r);
 }
 
-%PrepareFunctionForOptimization(ar);
 assertEquals(0, ar());
 assertEquals(0, ar());
 %OptimizeFunctionOnNextCall(ar);
@@ -51,7 +50,6 @@ function ar2() {
   return (r - r);
 }
 
-%PrepareFunctionForOptimization(ar2);
 assertEquals(0, ar2());
 assertEquals(0, ar2());
 %OptimizeFunctionOnNextCall(ar2);

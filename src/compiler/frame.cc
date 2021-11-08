@@ -5,50 +5,25 @@
 #include "src/compiler/frame.h"
 
 #include "src/compiler/linkage.h"
+#include "src/compiler/register-allocator.h"
+#include "src/macro-assembler.h"
 
 namespace v8 {
 namespace internal {
 namespace compiler {
 
-Frame::Frame(int fixed_frame_size_in_slots)
-    : fixed_slot_count_(fixed_frame_size_in_slots),
+Frame::Frame(int fixed_frame_size_in_slots, const CallDescriptor* descriptor)
+    : needs_frame_((descriptor != nullptr) &&
+                   descriptor->RequiresFrameAsIncoming()),
+      frame_slot_count_(fixed_frame_size_in_slots),
+      callee_saved_slot_count_(0),
+      spill_slot_count_(0),
       allocated_registers_(nullptr),
-      allocated_double_registers_(nullptr) {
-  slot_allocator_.AllocateUnaligned(fixed_frame_size_in_slots);
-}
+      allocated_double_registers_(nullptr) {}
 
-void Frame::AlignFrame(int alignment) {
-#if DEBUG
-  spill_slots_finished_ = true;
-  frame_aligned_ = true;
-#endif
-  // In the calculations below we assume that alignment is a power of 2.
-  DCHECK(base::bits::IsPowerOfTwo(alignment));
-  int alignment_in_slots = AlignedSlotAllocator::NumSlotsForWidth(alignment);
-
-  // We have to align return slots separately, because they are claimed
-  // separately on the stack.
-  const int mask = alignment_in_slots - 1;
-  int return_delta = alignment_in_slots - (return_slot_count_ & mask);
-  if (return_delta != alignment_in_slots) {
-    return_slot_count_ += return_delta;
-  }
-  int delta = alignment_in_slots - (slot_allocator_.Size() & mask);
-  if (delta != alignment_in_slots) {
-    slot_allocator_.Align(alignment_in_slots);
-    if (spill_slot_count_ != 0) {
-      spill_slot_count_ += delta;
-    }
-  }
-}
-
-void FrameAccessState::MarkHasFrame(bool state) {
-  has_frame_ = state;
-  SetFrameAccessToDefault();
-}
 
 void FrameAccessState::SetFrameAccessToDefault() {
-  if (has_frame() && !FLAG_turbo_sp_frame_access) {
+  if (frame()->needs_frame() && !FLAG_turbo_sp_frame_access) {
     SetFrameAccessToFP();
   } else {
     SetFrameAccessToSP();
@@ -57,12 +32,16 @@ void FrameAccessState::SetFrameAccessToDefault() {
 
 
 FrameOffset FrameAccessState::GetFrameOffset(int spill_slot) const {
-  const int frame_offset = FrameSlotToFPOffset(spill_slot);
+  const int offset =
+      (StandardFrameConstants::kFixedSlotCountAboveFp - spill_slot - 1) *
+      kPointerSize;
   if (access_frame_with_fp()) {
-    return FrameOffset::FromFramePointer(frame_offset);
+    DCHECK(frame()->needs_frame());
+    return FrameOffset::FromFramePointer(offset);
   } else {
     // No frame. Retrieve all parameters relative to stack pointer.
-    int sp_offset = frame_offset + GetSPToFPOffset();
+    int sp_offset =
+        offset + ((frame()->GetSpToFpSlotCount() + sp_delta()) * kPointerSize);
     return FrameOffset::FromStackPointer(sp_offset);
   }
 }

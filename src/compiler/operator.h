@@ -5,15 +5,12 @@
 #ifndef V8_COMPILER_OPERATOR_H_
 #define V8_COMPILER_OPERATOR_H_
 
-#include <ostream>
+#include <ostream>  // NOLINT(readability/streams)
 
-#include "src/base/compiler-specific.h"
 #include "src/base/flags.h"
 #include "src/base/functional.h"
-#include "src/common/globals.h"
-#include "src/handles/handles.h"
-#include "src/objects/feedback-cell.h"
-#include "src/zone/zone.h"
+#include "src/handles.h"
+#include "src/zone.h"
 
 namespace v8 {
 namespace internal {
@@ -31,49 +28,40 @@ namespace compiler {
 // as the name for a named field access, the ID of a runtime function, etc.
 // Static parameters are private to the operator and only semantically
 // meaningful to the operator itself.
-class V8_EXPORT_PRIVATE Operator : public NON_EXPORTED_BASE(ZoneObject) {
+class Operator : public ZoneObject {
  public:
-  using Opcode = uint16_t;
+  typedef uint16_t Opcode;
 
   // Properties inform the operator-independent optimizer about legal
   // transformations for nodes that have this operator.
   enum Property {
     kNoProperties = 0,
-    kCommutative = 1 << 0,  // OP(a, b) == OP(b, a) for all inputs.
-    kAssociative = 1 << 1,  // OP(a, OP(b,c)) == OP(OP(a,b), c) for all inputs.
-    kIdempotent = 1 << 2,   // OP(a); OP(a) == OP(a).
-    kNoRead = 1 << 3,       // Has no scheduling dependency on Effects
-    kNoWrite = 1 << 4,      // Does not modify any Effects and thereby
+    kReducible = 1 << 0,    // Participates in strength reduction.
+    kCommutative = 1 << 1,  // OP(a, b) == OP(b, a) for all inputs.
+    kAssociative = 1 << 2,  // OP(a, OP(b,c)) == OP(OP(a,b), c) for all inputs.
+    kIdempotent = 1 << 3,   // OP(a); OP(a) == OP(a).
+    kNoRead = 1 << 4,       // Has no scheduling dependency on Effects
+    kNoWrite = 1 << 5,      // Does not modify any Effects and thereby
                             // create new scheduling dependencies.
-    kNoThrow = 1 << 5,      // Can never generate an exception.
-    kNoDeopt = 1 << 6,      // Can never generate an eager deoptimization exit.
+    kNoThrow = 1 << 6,      // Can never generate an exception.
     kFoldable = kNoRead | kNoWrite,
-    kEliminatable = kNoDeopt | kNoWrite | kNoThrow,
-    kKontrol = kNoDeopt | kFoldable | kNoThrow,
-    kPure = kKontrol | kIdempotent
+    kKontrol = kFoldable | kNoThrow,
+    kEliminatable = kNoWrite | kNoThrow,
+    kPure = kNoRead | kNoWrite | kNoThrow | kIdempotent
   };
-
-// List of all bits, for the visualizer.
-#define OPERATOR_PROPERTY_LIST(V) \
-  V(Commutative)                  \
-  V(Associative) V(Idempotent) V(NoRead) V(NoWrite) V(NoThrow) V(NoDeopt)
-
-  using Properties = base::Flags<Property, uint8_t>;
-  enum class PrintVerbosity { kVerbose, kSilent };
+  typedef base::Flags<Property, uint8_t> Properties;
 
   // Constructor.
   Operator(Opcode opcode, Properties properties, const char* mnemonic,
            size_t value_in, size_t effect_in, size_t control_in,
            size_t value_out, size_t effect_out, size_t control_out);
-  Operator(const Operator&) = delete;
-  Operator& operator=(const Operator&) = delete;
 
-  virtual ~Operator() = default;
+  virtual ~Operator() {}
 
   // A small integer unique to all instances of a particular kind of operator,
   // useful for quick matching for specific kinds of operators. For fast access
   // the opcode is stored directly in the operator object.
-  constexpr Opcode opcode() const { return opcode_; }
+  Opcode opcode() const { return opcode_; }
 
   // Returns a constant string representing the mnemonic of the operator,
   // without the static parameters. Useful for debugging.
@@ -98,6 +86,9 @@ class V8_EXPORT_PRIVATE Operator : public NON_EXPORTED_BASE(ZoneObject) {
 
   Properties properties() const { return properties_; }
 
+  // TODO(bmeurer): Use bit fields below?
+  static const size_t kMaxControlOutputCount = (1u << 16) - 1;
+
   // TODO(titzer): convert return values here to size_t.
   int ValueInputCount() const { return value_in_; }
   int EffectInputCount() const { return effect_in_; }
@@ -120,37 +111,30 @@ class V8_EXPORT_PRIVATE Operator : public NON_EXPORTED_BASE(ZoneObject) {
   }
 
   // TODO(titzer): API for input and output types, for typechecking graph.
-
+ protected:
   // Print the full operator into the given stream, including any
   // static parameters. Useful for debugging and visualizing the IR.
-  void PrintTo(std::ostream& os,
-               PrintVerbosity verbose = PrintVerbosity::kVerbose) const {
-    // We cannot make PrintTo virtual, because default arguments to virtual
-    // methods are banned in the style guide.
-    return PrintToImpl(os, verbose);
-  }
-
-  void PrintPropsTo(std::ostream& os) const;
-
- protected:
-  virtual void PrintToImpl(std::ostream& os, PrintVerbosity verbose) const;
+  virtual void PrintTo(std::ostream& os) const;
+  friend std::ostream& operator<<(std::ostream& os, const Operator& op);
 
  private:
-  const char* mnemonic_;
   Opcode opcode_;
   Properties properties_;
+  const char* mnemonic_;
   uint32_t value_in_;
-  uint32_t effect_in_;
-  uint32_t control_in_;
-  uint32_t value_out_;
+  uint16_t effect_in_;
+  uint16_t control_in_;
+  uint16_t value_out_;
   uint8_t effect_out_;
-  uint32_t control_out_;
+  uint16_t control_out_;
+
+  DISALLOW_COPY_AND_ASSIGN(Operator);
 };
 
 DEFINE_OPERATORS_FOR_FLAGS(Operator::Properties)
 
-V8_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& os,
-                                           const Operator& op);
+std::ostream& operator<<(std::ostream& os, const Operator& op);
+
 
 // Default equality function for below Operator1<*> class.
 template <typename T>
@@ -188,19 +172,14 @@ class Operator1 : public Operator {
   size_t HashCode() const final {
     return base::hash_combine(this->opcode(), this->hash_(this->parameter()));
   }
-  // For most parameter types, we have only a verbose way to print them, namely
-  // ostream << parameter. But for some types it is particularly useful to have
-  // a shorter way to print them for the node labels in Turbolizer. The
-  // following method can be overridden to provide a concise and a verbose
-  // printing of a parameter.
-
-  virtual void PrintParameter(std::ostream& os, PrintVerbosity verbose) const {
-    os << "[" << parameter() << "]";
+  virtual void PrintParameter(std::ostream& os) const {
+    os << "[" << this->parameter() << "]";
   }
 
-  void PrintToImpl(std::ostream& os, PrintVerbosity verbose) const override {
+ protected:
+  void PrintTo(std::ostream& os) const final {
     os << mnemonic();
-    PrintParameter(os, verbose);
+    PrintParameter(os);
   }
 
  private:
@@ -231,10 +210,20 @@ struct OpEqualTo<double> : public base::bit_equal_to<double> {};
 template <>
 struct OpHash<double> : public base::bit_hash<double> {};
 
-template <class T>
-struct OpEqualTo<Handle<T>> : public Handle<T>::equal_to {};
-template <class T>
-struct OpHash<Handle<T>> : public Handle<T>::hash {};
+template <>
+struct OpEqualTo<Handle<HeapObject>> : public Handle<HeapObject>::equal_to {};
+template <>
+struct OpHash<Handle<HeapObject>> : public Handle<HeapObject>::hash {};
+
+template <>
+struct OpEqualTo<Handle<String>> : public Handle<String>::equal_to {};
+template <>
+struct OpHash<Handle<String>> : public Handle<String>::hash {};
+
+template <>
+struct OpEqualTo<Handle<ScopeInfo>> : public Handle<ScopeInfo>::equal_to {};
+template <>
+struct OpHash<Handle<ScopeInfo>> : public Handle<ScopeInfo>::hash {};
 
 }  // namespace compiler
 }  // namespace internal

@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "test/unittests/compiler/backend/instruction-selector-unittest.h"
-
-#include "src/codegen/assembler-inl.h"
+#include "test/unittests/compiler/instruction-selector-unittest.h"
 
 namespace v8 {
 namespace internal {

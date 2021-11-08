@@ -25,7 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --allow-natives-syntax --opt --no-always-opt
+// Flags: --allow-natives-syntax
 
 var calls = 0;
 
@@ -43,29 +43,20 @@ Array.prototype.f = function() {
 var o1 = {m: 1};
 var o2 = {a: 0, m:1};
 
-%PrepareFunctionForOptimization(callsFReceiver);
 var r1 = callsFReceiver(o1);
 callsFReceiver(o1);
 %OptimizeFunctionOnNextCall(callsFReceiver);
 var r2 = callsFReceiver(o1);
 assertOptimized(callsFReceiver);
 callsFReceiver(o2);
-if (%DynamicCheckMapsEnabled()) {
-  // Call it again to ensure a deopt when dynamic map checks is enabled.
-  callsFReceiver(o2);
-}
 assertUnoptimized(callsFReceiver);
-
-%PrepareFunctionForOptimization(callsFReceiver);
 var r3 = callsFReceiver(o1);
 
 assertEquals(1, r1);
 assertTrue(r1 === r2);
 assertTrue(r2 === r3);
 
-%OptimizeFunctionOnNextCall(callsFReceiver);
 r1 = callsFReceiver(o1);
-%PrepareFunctionForOptimization(callsFReceiver);
 callsFReceiver(o1);
 %OptimizeFunctionOnNextCall(callsFReceiver);
 r2 = callsFReceiver(o1);
@@ -76,9 +67,4 @@ assertEquals(1, r1);
 assertTrue(r1 === r2);
 assertTrue(r2 === r3);
 
-
-if (%DynamicCheckMapsEnabled()) {
-  assertEquals(11, calls);
-} else {
-  assertEquals(10, calls);
-}
+assertEquals(10, calls);

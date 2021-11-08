@@ -30,12 +30,10 @@ function testSideEffects(subject, re) {
   var side_effect_object = { valueOf: function() { return counter++; } };
   re.lastIndex = side_effect_object;
   re.exec(subject);
-
   assertEquals(1, counter);
 
   re.lastIndex = side_effect_object;
   re.test(subject);
-
   assertEquals(2, counter);
 }
 

@@ -29,17 +29,13 @@
 
 #include <vector>
 
-#include "include/v8-initialization.h"
-#include "src/api/api-inl.h"
-#include "src/base/bit-field.h"
-#include "src/base/platform/platform.h"
-#include "src/init/v8.h"
-#include "src/numbers/conversions.h"
-#include "test/cctest/cctest.h"
-#include "test/cctest/collector.h"
+#include "src/v8.h"
 
-namespace v8 {
-namespace internal {
+#include "src/base/platform/platform.h"
+#include "test/cctest/cctest.h"
+
+using namespace v8::internal;
+
 
 TEST(Utils1) {
   CHECK_EQ(-1000000, FastD2I(-1000000.0));
@@ -80,34 +76,30 @@ TEST(Utils1) {
 
 
 TEST(BitSetComputer) {
-  using BoolComputer = base::BitSetComputer<bool, 1, kSmiValueSize, uint32_t>;
+  typedef BitSetComputer<bool, 1, kSmiValueSize, uint32_t> BoolComputer;
   CHECK_EQ(0, BoolComputer::word_count(0));
   CHECK_EQ(1, BoolComputer::word_count(8));
   CHECK_EQ(2, BoolComputer::word_count(50));
   CHECK_EQ(0, BoolComputer::index(0, 8));
   CHECK_EQ(100, BoolComputer::index(100, 8));
   CHECK_EQ(1, BoolComputer::index(0, 40));
-
-  {
-    uint32_t data = 0;
-    data = BoolComputer::encode(data, 1, true);
-    data = BoolComputer::encode(data, 4, true);
-    CHECK(BoolComputer::decode(data, 1));
-    CHECK(BoolComputer::decode(data, 4));
-    CHECK(!BoolComputer::decode(data, 0));
-    CHECK(!BoolComputer::decode(data, 2));
-    CHECK(!BoolComputer::decode(data, 3));
-  }
+  uint32_t data = 0;
+  data = BoolComputer::encode(data, 1, true);
+  data = BoolComputer::encode(data, 4, true);
+  CHECK_EQ(true, BoolComputer::decode(data, 1));
+  CHECK_EQ(true, BoolComputer::decode(data, 4));
+  CHECK_EQ(false, BoolComputer::decode(data, 0));
+  CHECK_EQ(false, BoolComputer::decode(data, 2));
+  CHECK_EQ(false, BoolComputer::decode(data, 3));
 
   // Lets store 2 bits per item with 3000 items and verify the values are
   // correct.
-  using TwoBits = base::BitSetComputer<unsigned char, 2, 8, unsigned char>;
+  typedef BitSetComputer<unsigned char, 2, 8, unsigned char> TwoBits;
   const int words = 750;
   CHECK_EQ(words, TwoBits::word_count(3000));
   const int offset = 10;
-  base::Vector<unsigned char> buffer =
-      base::Vector<unsigned char>::New(offset + words);
-  memset(buffer.begin(), 0, sizeof(unsigned char) * buffer.length());
+  Vector<unsigned char> buffer = Vector<unsigned char>::New(offset + words);
+  memset(buffer.start(), 0, sizeof(unsigned char) * buffer.length());
   for (int i = 0; i < words; i++) {
     const int index = TwoBits::index(offset, i);
     unsigned char data = buffer[index];
@@ -128,20 +120,20 @@ TEST(SNPrintF) {
   // Make sure that strings that are truncated because of too small
   // buffers are zero-terminated anyway.
   const char* s = "the quick lazy .... oh forget it!";
-  int length = static_cast<int>(strlen(s));
+  int length = StrLength(s);
   for (int i = 1; i < length * 2; i++) {
     static const char kMarker = static_cast<char>(42);
-    base::Vector<char> buffer = base::Vector<char>::New(i + 1);
+    Vector<char> buffer = Vector<char>::New(i + 1);
     buffer[i] = kMarker;
-    int n = SNPrintF(base::Vector<char>(buffer.begin(), i), "%s", s);
+    int n = SNPrintF(Vector<char>(buffer.start(), i), "%s", s);
     CHECK(n <= i);
     CHECK(n == length || n == -1);
-    CHECK_EQ(0, strncmp(buffer.begin(), s, i - 1));
+    CHECK_EQ(0, strncmp(buffer.start(), s, i - 1));
     CHECK_EQ(kMarker, buffer[i]);
     if (i <= length) {
-      CHECK_EQ(i - 1, strlen(buffer.begin()));
+      CHECK_EQ(i - 1, StrLength(buffer.start()));
     } else {
-      CHECK_EQ(length, strlen(buffer.begin()));
+      CHECK_EQ(length, StrLength(buffer.start()));
     }
     buffer.Dispose();
   }
@@ -170,7 +162,7 @@ void TestMemMove(byte* area1,
       printf("diff at offset %d (%p): is %d, should be %d\n", i,
              reinterpret_cast<void*>(area1 + i), area1[i], area2[i]);
     }
-    FATAL("memmove error");
+    CHECK(false);
   }
 }
 
@@ -203,7 +195,7 @@ TEST(Collector) {
   const int kSequentialSize = 1000;
   const int kBlockSize = 7;
   for (int loop = 0; loop < kLoops; loop++) {
-    base::Vector<int> block = collector.AddBlock(7, 0xBADCAFE);
+    Vector<int> block = collector.AddBlock(7, 0xbadcafe);
     for (int i = 0; i < kSequentialSize; i++) {
       collector.Add(i);
     }
@@ -211,14 +203,14 @@ TEST(Collector) {
       block[i] = i * 7;
     }
   }
-  base::Vector<int> result = collector.ToVector();
+  Vector<int> result = collector.ToVector();
   CHECK_EQ(kLoops * (kBlockSize + kSequentialSize), result.length());
   for (int i = 0; i < kLoops; i++) {
     int offset = i * (kSequentialSize + kBlockSize);
     for (int j = 0; j < kBlockSize - 1; j++) {
       CHECK_EQ(j * 7, result[offset + j]);
     }
-    CHECK_EQ(0xBADCAFE, result[offset + kBlockSize - 1]);
+    CHECK_EQ(0xbadcafe, result[offset + kBlockSize - 1]);
     for (int j = 0; j < kSequentialSize; j++) {
       CHECK_EQ(j, result[offset + kBlockSize + j]);
     }
@@ -238,13 +230,13 @@ TEST(SequenceCollector) {
     for (int j = 0; j < seq_length; j++) {
       collector.Add(j);
     }
-    base::Vector<int> sequence = collector.EndSequence();
+    Vector<int> sequence = collector.EndSequence();
     for (int j = 0; j < seq_length; j++) {
       CHECK_EQ(j, sequence[j]);
     }
     total_length += seq_length;
   }
-  base::Vector<int> result = collector.ToVector();
+  Vector<int> result = collector.ToVector();
   CHECK_EQ(total_length, result.length());
   int offset = 0;
   for (int loop = 0; loop < kLoops; loop++) {
@@ -263,10 +255,10 @@ TEST(SequenceCollectorRegression) {
   collector.StartSequence();
   collector.Add('0');
   collector.AddBlock(
-      base::Vector<const char>("12345678901234567890123456789012", 32));
-  base::Vector<char> seq = collector.EndSequence();
-  CHECK_EQ(0, strncmp("0123456789012345678901234567890123", seq.begin(),
-                      seq.length()));
+      i::Vector<const char>("12345678901234567890123456789012", 32));
+  i::Vector<char> seq = collector.EndSequence();
+  CHECK_EQ(0, strncmp("0123456789012345678901234567890123",
+                      seq.start(), seq.length()));
 }
 
 
@@ -281,7 +273,16 @@ TEST(CPlusPlus11Features) {
   S s{true, {3.1415, {1, 2, 3}}};
   CHECK_EQ(2, s.t.z[1]);
 
+// TODO(svenpanne) Remove the old-skool code when we ship the new C++ headers.
+#if 0
   std::vector<int> vec{11, 22, 33, 44};
+#else
+  std::vector<int> vec;
+  vec.push_back(11);
+  vec.push_back(22);
+  vec.push_back(33);
+  vec.push_back(44);
+#endif
   vec.push_back(55);
   vec.push_back(66);
   for (auto& i : vec) {
@@ -293,6 +294,3 @@ TEST(CPlusPlus11Features) {
     j += 11;
   }
 }
-
-}  // namespace internal
-}  // namespace v8

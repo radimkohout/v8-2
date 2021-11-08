@@ -20,8 +20,6 @@ function foo(expected, x) {
   return passed;
 }
 
-%PrepareFunctionForOptimization(foo);
-
 assertTrue(foo([0,1], [0,1]));
 assertTrue(foo([0,2], [0,2]));
 assertFalse(foo([0,2.25], [0,2.75]));

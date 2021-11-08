@@ -7,7 +7,6 @@
 function g() { return { val: new.target }; }
 function f() { return (new g()).val; }
 
-%PrepareFunctionForOptimization(f);
 assertEquals(g, f());
 assertEquals(g, f());
 %OptimizeFunctionOnNextCall(f);

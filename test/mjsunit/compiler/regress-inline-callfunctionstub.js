@@ -38,7 +38,6 @@ function main(func) {
   }
 }
 
-%PrepareFunctionForOptimization(main);
 main(o.g);
 main(o.g);
 main(o.g);

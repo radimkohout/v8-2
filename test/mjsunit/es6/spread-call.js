@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --allow-natives-syntax
-
-function testSpreadCallsStrict() {
+(function testSpreadCallsStrict() {
   "use strict"
   function countArgs() { return arguments.length; }
 
@@ -26,13 +24,6 @@ function testSpreadCallsStrict() {
   assertEquals(5, countArgs(...[1, 2, 3, 4, 5]));
   assertEquals(6, countArgs(...[1, 2, 3, 4, 5, 6]));
 
-  assertEquals(1, countArgs(...[1.1]));
-  assertEquals(2, countArgs(...[1.1, 2.2]));
-  assertEquals(3, countArgs(...[1.1, 2.2, 3.3]));
-  assertEquals(4, countArgs(...[1.1, 2.2, 3.3, 4.4]));
-  assertEquals(5, countArgs(...[1.1, 2.2, 3.3, 4.4, 5.5]));
-  assertEquals(6, countArgs(...[1.1, 2.2, 3.3, 4.4, 5.5, 6.6]));
-
   assertEquals(1, countArgs(...new Set([1])));
   assertEquals(2, countArgs(...new Set([1, 2])));
   assertEquals(3, countArgs(...new Set([1, 2, 3])));
@@ -51,9 +42,6 @@ function testSpreadCallsStrict() {
     return sum;
   }
 
-  assertThrows(function() {
-    sum(...0);
-  }, TypeError);
   assertEquals(void 0, sum(...""));
   assertEquals(void 0, sum(...[]));
   assertEquals(void 0, sum(...new Set));
@@ -160,11 +148,7 @@ function testSpreadCallsStrict() {
   // Interleaved spread/unspread args
   assertEquals(36, O.sum(0, ...[1], 2, 3, ...[4, 5], 6, 7, 8));
   assertEquals(45, O.sum(0, ...[1], 2, 3, ...[4, 5], 6, 7, 8, ...[9]));
-};
-%PrepareFunctionForOptimization(testSpreadCallsStrict);
-testSpreadCallsStrict();
-%OptimizeFunctionOnNextCall(testSpreadCallsStrict);
-testSpreadCallsStrict();
+})();
 
 
 (function testSpreadCallsSloppy() {
@@ -210,9 +194,6 @@ testSpreadCallsStrict();
     return sum;
   }
 
-  assertThrows(function() {
-    sum(...0);
-  }, TypeError);
   assertEquals(void 0, sum(...""));
   assertEquals(void 0, sum(...[]));
   assertEquals(void 0, sum(...new Set));
@@ -365,99 +346,6 @@ testSpreadCallsStrict();
   assertEquals("ABXYC1C2DEBXYC1C2", log);
 })();
 
-(function testArrayPrototypeHoleGetterModifiesIteratorPrototypeNext() {
-  function sum() {
-    var sum = arguments[0];
-    for (var i = 1; i < arguments.length; ++i) {
-      sum += arguments[i];
-    }
-    return sum;
-  }
-  var a = [1, 2];
-  a[3] = 4;
-  var called = 0;
-
-  // .next method is only accessed during iteration prologue (see
-  // https://github.com/tc39/ecma262/pull/988)
-  let ArrayIteratorPrototype = Array.prototype[Symbol.iterator]().__proto__;
-  let ArrayIteratorPrototypeNextDescriptor =
-      Object.getOwnPropertyDescriptor(ArrayIteratorPrototype, 'next');
-  Object.defineProperty(Array.prototype, 2, {
-    get: function() {
-      var ai = a[Symbol.iterator]();
-      var original_next = ai.__proto__["next"];
-      Object.defineProperty(ai.__proto__, "next", {
-        get: function() {
-          called++;
-          return original_next;
-        },
-        configurable: true
-      });
-      return 3;
-    },
-    configurable: true
-  });
-
-  assertEquals(10, sum(...a));
-  assertEquals(0, called);
-
-  Object.defineProperty(ArrayIteratorPrototype, 'next',
-                        ArrayIteratorPrototypeNextDescriptor);
-  Object.defineProperty(Array.prototype, 2, {});
-})();
-
-(function testArrayHasOtherPrototype() {
-  function countArgs() { return arguments.length; }
-  var a = [1, 2, 3];
-  var b = {};
-  Object.defineProperty(b, Symbol.iterator, {
-    value: function*() {
-      yield 4;
-    },
-    configurable: true
-  });
-
-  Object.setPrototypeOf(a, b);
-
-  assertEquals(1, countArgs(...a));
-})();
-
-(function testArrayIteratorPrototypeGetter() {
-  function countArgs() { return arguments.length; }
-  var a = [1, 2, 3];
-  var ai = a[Symbol.iterator]();
-  var called = 0;
-
-  var original_next = ai.__proto__["next"];
-
-  Object.defineProperty(ai.__proto__, "next", {
-    get: function() {
-      called++;
-      return original_next;
-    }
-  });
-
-  countArgs(...a);
-
-  // .next method is only accessed during iteration prologue (see
-  // https://github.com/tc39/ecma262/pull/988)
-  assertEquals(1, called);
-})();
-
-(function testArrayIteratorPrototypeModified() {
-  function countArgs() { return arguments.length; }
-  var a = [1,2,3];
-  var ai = a[Symbol.iterator]();
-  Object.defineProperty(ai.__proto__, "next", {
-    value: function() {
-      return {value: undefined, done: true};
-     },
-     configurable: true
-  });
-
-  assertEquals(0, countArgs(...a));
-
-})();
 
 (function testCustomArrayPrototypeIterator() {
   var origIterator =
@@ -481,30 +369,4 @@ testSpreadCallsStrict();
   assertEquals(5, returnCountSloppy(1, ...[2], 3));
 
   Object.defineProperty(Array.prototype, Symbol.iterator, origIterator);
-})();
-
-(function testGetPropertyIteratorCalledExactlyOnce() {
-  function countArgs() { return arguments.length; }
-  var a = [1, 2, 3];
-  var called = 0;
-
-  Object.defineProperty(Array.prototype, Symbol.iterator, {
-    value: function*() {
-      yield 1;
-      yield 2;
-    },
-    configurable: true
-  });
-
-  var it = a[Symbol.iterator];
-  Object.defineProperty(a, Symbol.iterator, {
-    get: function() {
-      called++;
-      return it;
-    }
-  });
-
-  countArgs(...a);
-
-  assertEquals(1, called);
 })();

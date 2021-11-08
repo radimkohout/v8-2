@@ -32,7 +32,6 @@ function f1(a, i) {
 }
 
 var a1 = [,,,,,,,,,,,,,,,,,,0.5];
-%PrepareFunctionForOptimization(f1);
 assertEquals(undefined, f1(a1, 1));
 assertEquals(undefined, f1(a1, 1));
 %OptimizeFunctionOnNextCall(f1);
@@ -43,7 +42,6 @@ function f2(a, i) {
   return a[i] + 0.5;
 }
 var a2_b = [0.0,,];
-%PrepareFunctionForOptimization(f2);
 assertEquals(0.5, f2(a2_b, 0));
 assertEquals(0.5, f2(a2_b, 0));
 %OptimizeFunctionOnNextCall(f2);

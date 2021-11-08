@@ -62,26 +62,16 @@ function hej(x) {
   return o.g(x, "z");
 }
 
-function opt_g() {
-  %PrepareFunctionForOptimization(o.g);
+function opt() {
   for (var k=0; k<2; k++) {
     for (var i=0; i<5; i++) o.g(i, "g");
-  }
-  %OptimizeFunctionOnNextCall(o.g);
-  o.g(0, "g");
-}
-
-function opt_hej() {
-  %PrepareFunctionForOptimization(hej);
-  for (var k=0; k<2; k++) {
     for (var j=0; j<5; j++) hej(j);
   }
+  %OptimizeFunctionOnNextCall(o.g);
   %OptimizeFunctionOnNextCall(hej);
-  hej(0)
 }
 
-opt_g();
-opt_hej();
+opt();
 assertArrayEquals([0, "g"], o.g(0, "g"));
 assertArrayEquals([1, "f"], o.g(1, "g"));
 assertArrayEquals([0, "h"], hej(0));
@@ -89,8 +79,7 @@ assertArrayEquals([1, "f"], hej(1));
 
 o = new B();
 
-opt_g();
-opt_hej();
+opt();
 assertArrayEquals([0, "f"], o.g(0, "g"));
 assertArrayEquals([1, "g"], o.g(1, "g"));
 assertArrayEquals([0, "f"], hej(0));

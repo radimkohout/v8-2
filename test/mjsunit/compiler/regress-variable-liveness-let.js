@@ -11,6 +11,5 @@ function f() {
   let x = 23;
 }
 
-%PrepareFunctionForOptimization(f);
 %OptimizeFunctionOnNextCall(f);
 f();

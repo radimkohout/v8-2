@@ -106,7 +106,6 @@ function foo(x) {
 for(var i = 0; i < 1000; i++) {
   foo(-i);
 }
-%PrepareFunctionForOptimization(foo);
 assertEquals(42, foo(-42));
 %OptimizeFunctionOnNextCall(foo)
 assertEquals(42, foo(-42));
@@ -116,8 +115,7 @@ assertEquals(42, foo(-42));
 var a = [-1, -2];
 function foo2() {
   return Math.abs(a[0]);
-};
-%PrepareFunctionForOptimization(foo2);
+}
 assertEquals(1, foo2());
 assertEquals(1, foo2());
 %OptimizeFunctionOnNextCall(foo2);
@@ -134,7 +132,6 @@ function absHalf(bits) {
 // Create minimum integer input for abs() using bitwise operations
 // that should overflow.
 bits = 32;
-%PrepareFunctionForOptimization(absHalf);
 assertEquals(2147483648, absHalf(bits));
 assertEquals(2147483648, absHalf(bits));
 %OptimizeFunctionOnNextCall(absHalf);

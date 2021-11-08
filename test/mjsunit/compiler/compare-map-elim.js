@@ -38,8 +38,6 @@ function x(z) {
   return z.f();
 }
 
-%PrepareFunctionForOptimization(x);
-
 x(a);
 x(b);
 x(a);

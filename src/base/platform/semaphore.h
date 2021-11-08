@@ -5,20 +5,15 @@
 #ifndef V8_BASE_PLATFORM_SEMAPHORE_H_
 #define V8_BASE_PLATFORM_SEMAPHORE_H_
 
-#include "src/base/base-export.h"
 #include "src/base/lazy-instance.h"
 #if V8_OS_WIN
 #include "src/base/win32-headers.h"
 #endif
 
 #if V8_OS_MACOSX
-#include <dispatch/dispatch.h>
+#include <mach/semaphore.h>  // NOLINT
 #elif V8_OS_POSIX
-#include <semaphore.h>
-#endif
-
-#if V8_OS_STARBOARD
-#include "starboard/common/semaphore.h"
+#include <semaphore.h>  // NOLINT
 #endif
 
 namespace v8 {
@@ -36,33 +31,30 @@ class TimeDelta;
 // count reaches zero,  threads waiting for the semaphore blocks until the
 // count becomes non-zero.
 
-class V8_BASE_EXPORT Semaphore final {
+class Semaphore final {
  public:
   explicit Semaphore(int count);
-  Semaphore(const Semaphore&) = delete;
-  Semaphore& operator=(const Semaphore&) = delete;
   ~Semaphore();
 
   // Increments the semaphore counter.
   void Signal();
 
-  // Decrements the semaphore counter if it is positive, or blocks until it
-  // becomes positive and then decrements the counter.
+  // Suspends the calling thread until the semaphore counter is non zero
+  // and then decrements the semaphore counter.
   void Wait();
 
-  // Like Wait() but returns after rel_time time has passed. If the timeout
-  // happens the return value is false and the counter is unchanged. Otherwise
-  // the semaphore counter is decremented and true is returned.
-  bool WaitFor(const TimeDelta& rel_time) V8_WARN_UNUSED_RESULT;
+  // Suspends the calling thread until the counter is non zero or the timeout
+  // time has passed. If timeout happens the return value is false and the
+  // counter is unchanged. Otherwise the semaphore counter is decremented and
+  // true is returned.
+  bool WaitFor(const TimeDelta& rel_time) WARN_UNUSED_RESULT;
 
 #if V8_OS_MACOSX
-  using NativeHandle = dispatch_semaphore_t;
+  typedef semaphore_t NativeHandle;
 #elif V8_OS_POSIX
-  using NativeHandle = sem_t;
+  typedef sem_t NativeHandle;
 #elif V8_OS_WIN
-  using NativeHandle = HANDLE;
-#elif V8_OS_STARBOARD
-  using NativeHandle = starboard::Semaphore;
+  typedef HANDLE NativeHandle;
 #endif
 
   NativeHandle& native_handle() {
@@ -74,6 +66,8 @@ class V8_BASE_EXPORT Semaphore final {
 
  private:
   NativeHandle native_handle_;
+
+  DISALLOW_COPY_AND_ASSIGN(Semaphore);
 };
 
 
@@ -96,8 +90,8 @@ struct CreateSemaphoreTrait {
 
 template <int N>
 struct LazySemaphore {
-  using typename LazyDynamicInstance<Semaphore, CreateSemaphoreTrait<N>,
-                                     ThreadSafeInitOnceTrait>::type;
+  typedef typename LazyDynamicInstance<Semaphore, CreateSemaphoreTrait<N>,
+                                       ThreadSafeInitOnceTrait>::type type;
 };
 
 #define LAZY_SEMAPHORE_INITIALIZER LAZY_DYNAMIC_INSTANCE_INITIALIZER

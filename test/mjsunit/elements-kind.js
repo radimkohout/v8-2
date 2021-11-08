@@ -25,8 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --allow-natives-syntax --expose-gc --nostress-opt
-// Flags: --deopt-every-n-times=0
+// Flags: --allow-natives-syntax --expose-gc --nostress-opt --typed-array-max-size-in-heap=2048
 
 var elements_kind = {
   fast_smi_only             :  'fast smi only elements',
@@ -45,9 +44,9 @@ var elements_kind = {
 }
 
 function getKind(obj) {
-  if (%HasSmiElements(obj)) return elements_kind.fast_smi_only;
-  if (%HasObjectElements(obj)) return elements_kind.fast;
-  if (%HasDoubleElements(obj)) return elements_kind.fast_double;
+  if (%HasFastSmiElements(obj)) return elements_kind.fast_smi_only;
+  if (%HasFastObjectElements(obj)) return elements_kind.fast;
+  if (%HasFastDoubleElements(obj)) return elements_kind.fast_double;
   if (%HasDictionaryElements(obj)) return elements_kind.dictionary;
 
   if (%HasFixedInt8Elements(obj)) {
@@ -110,16 +109,11 @@ function test_wrapper() {
   assertKind(elements_kind.fast, you);
 
   var temp = [];
-  // If we store beyond kMaxGap (1024) we should transition to slow elements.
-  temp[1024] = 0;
+  temp[0xDECAF] = 0;
   assertKind(elements_kind.dictionary, temp);
 
   var fast_double_array = new Array(0xDECAF);
-  // If the gap is greater than 1024 (kMaxGap) we would transition the array
-  // to slow. So increment should be less than 1024.
-  for (var i = 0; i < 0xDECAF; i+=1023) {
-    fast_double_array[i] = i / 2;
-  }
+  for (var i = 0; i < 0xDECAF; i++) fast_double_array[i] = i / 2;
   assertKind(elements_kind.fast_double, fast_double_array);
 
   assertKind(elements_kind.fixed_int8,    new Int8Array(007));
@@ -157,7 +151,6 @@ function test_wrapper() {
   }
   var smi_only = new Array(1, 2, 3);
   assertKind(elements_kind.fast_smi_only, smi_only);
-  %PrepareFunctionForOptimization(monomorphic);
   for (var i = 0; i < 3; i++) monomorphic(smi_only);
     %OptimizeFunctionOnNextCall(monomorphic);
   monomorphic(smi_only);
@@ -166,7 +159,7 @@ function test_wrapper() {
 // The test is called in a wrapper function to eliminate the transition learning
 // feedback of AllocationSites.
 test_wrapper();
-%ClearFunctionFeedback(test_wrapper);
+%ClearFunctionTypeFeedback(test_wrapper);
 
 %NeverOptimizeFunction(construct_smis);
 
@@ -181,25 +174,20 @@ function make_array() {
   return eval(make_array_string());
 }
 
-%EnsureFeedbackVectorForFunction(construct_smis);
 function construct_smis() {
   var a = make_array();
   a[0] = 0;  // Send the COW array map to the steak house.
   assertKind(elements_kind.fast_smi_only, a);
   return a;
 }
-
   %NeverOptimizeFunction(construct_doubles);
-%EnsureFeedbackVectorForFunction(construct_doubles);
 function construct_doubles() {
   var a = construct_smis();
   a[0] = 1.5;
   assertKind(elements_kind.fast_double, a);
   return a;
 }
-
   %NeverOptimizeFunction(construct_objects);
-%EnsureFeedbackVectorForFunction(construct_objects);
 function construct_objects() {
   var a = construct_smis();
   a[0] = "one";
@@ -208,26 +196,24 @@ function construct_objects() {
 }
 
 // Test crankshafted transition SMI->DOUBLE.
-  %EnsureFeedbackVectorForFunction(convert_to_double);
+  %NeverOptimizeFunction(convert_to_double);
 function convert_to_double(array) {
   array[1] = 2.5;
   assertKind(elements_kind.fast_double, array);
   assertEquals(2.5, array[1]);
-};
-%PrepareFunctionForOptimization(convert_to_double);
+}
 var smis = construct_smis();
 for (var i = 0; i < 3; i++) convert_to_double(smis);
   %OptimizeFunctionOnNextCall(convert_to_double);
 smis = construct_smis();
 convert_to_double(smis);
 // Test crankshafted transitions SMI->FAST and DOUBLE->FAST.
-  %EnsureFeedbackVectorForFunction(convert_to_fast);
+  %NeverOptimizeFunction(convert_to_fast);
 function convert_to_fast(array) {
   array[1] = "two";
   assertKind(elements_kind.fast, array);
   assertEquals("two", array[1]);
-};
-%PrepareFunctionForOptimization(convert_to_fast);
+}
 smis = construct_smis();
 for (var i = 0; i < 3; i++) convert_to_fast(smis);
 var doubles = construct_doubles();
@@ -239,12 +225,12 @@ convert_to_fast(smis);
 convert_to_fast(doubles);
 // Test transition chain SMI->DOUBLE->FAST (crankshafted function will
 // transition to FAST directly).
+  %NeverOptimizeFunction(convert_mixed);
 function convert_mixed(array, value, kind) {
   array[1] = value;
   assertKind(kind, array);
   assertEquals(value, array[1]);
 }
-%PrepareFunctionForOptimization(convert_mixed);
 smis = construct_smis();
 for (var i = 0; i < 3; i++) {
   convert_mixed(smis, 1.5, elements_kind.fast_double);
@@ -255,17 +241,12 @@ for (var i = 0; i < 3; i++) {
 }
 convert_mixed(construct_smis(), "three", elements_kind.fast);
 convert_mixed(construct_doubles(), "three", elements_kind.fast);
-
-if (%ICsAreEnabled()) {
-  // Test that allocation sites allocate correct elements kind initially based
-  // on previous transitions.
   %OptimizeFunctionOnNextCall(convert_mixed);
-  smis = construct_smis();
-  doubles = construct_doubles();
-  convert_mixed(smis, 1, elements_kind.fast);
-  convert_mixed(doubles, 1, elements_kind.fast);
-  assertTrue(%HaveSameMap(smis, doubles));
-}
+smis = construct_smis();
+doubles = construct_doubles();
+convert_mixed(smis, 1, elements_kind.fast);
+convert_mixed(doubles, 1, elements_kind.fast);
+assertTrue(%HaveSameMap(smis, doubles));
 
 // Crankshaft support for smi-only elements in dynamic array literals.
 function get(foo) { return foo; }  // Used to generate dynamic values.
@@ -281,7 +262,6 @@ function crankshaft_test() {
   var c = [get(1), get(2), get(3.5)];
   assertKind(elements_kind.fast_double, c);
 }
-%PrepareFunctionForOptimization(crankshaft_test);
 for (var i = 0; i < 3; i++) {
   crankshaft_test();
 }

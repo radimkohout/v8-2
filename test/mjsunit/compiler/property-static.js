@@ -46,7 +46,6 @@ Object.prototype.load.call({ A:0, B:0, C:0, D:0, E:0, F:0, property:15 });
     return object.load();
   }
 
-  %PrepareFunctionForOptimization(f);
   assertSame(1, f(1));
   assertSame(2, f(2));
   %OptimizeFunctionOnNextCall(f);
@@ -63,7 +62,6 @@ Object.prototype.load.call({ A:0, B:0, C:0, D:0, E:0, F:0, property:15 });
     return object.load();
   }
 
-  %PrepareFunctionForOptimization(f);
   assertSame(1, f(1));
   assertSame(2, f(2));
   %OptimizeFunctionOnNextCall(f);

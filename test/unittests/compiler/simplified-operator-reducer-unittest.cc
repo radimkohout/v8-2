@@ -2,14 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "src/compiler/simplified-operator-reducer.h"
-#include "src/codegen/tick-counter.h"
 #include "src/compiler/access-builder.h"
 #include "src/compiler/js-graph.h"
 #include "src/compiler/node-properties.h"
 #include "src/compiler/simplified-operator.h"
-#include "src/compiler/types.h"
-#include "src/numbers/conversions-inl.h"
+#include "src/compiler/simplified-operator-reducer.h"
+#include "src/conversions-inl.h"
+#include "src/types.h"
 #include "test/unittests/compiler/graph-unittest.h"
 #include "test/unittests/compiler/node-test-utils.h"
 #include "testing/gmock-support.h"
@@ -20,13 +19,12 @@ using testing::BitEq;
 namespace v8 {
 namespace internal {
 namespace compiler {
-namespace simplified_operator_reducer_unittest {
 
-class SimplifiedOperatorReducerTest : public GraphTest {
+class SimplifiedOperatorReducerTest : public TypedGraphTest {
  public:
   explicit SimplifiedOperatorReducerTest(int num_parameters = 1)
-      : GraphTest(num_parameters), simplified_(zone()) {}
-  ~SimplifiedOperatorReducerTest() override = default;
+      : TypedGraphTest(num_parameters), simplified_(zone()) {}
+  ~SimplifiedOperatorReducerTest() override {}
 
  protected:
   Reduction Reduce(Node* node) {
@@ -34,8 +32,7 @@ class SimplifiedOperatorReducerTest : public GraphTest {
     JSOperatorBuilder javascript(zone());
     JSGraph jsgraph(isolate(), graph(), common(), &javascript, simplified(),
                     &machine);
-    GraphReducer graph_reducer(zone(), graph(), tick_counter(), broker());
-    SimplifiedOperatorReducer reducer(&graph_reducer, &jsgraph, broker());
+    SimplifiedOperatorReducer reducer(&jsgraph);
     return reducer.Reduce(node);
   }
 
@@ -53,7 +50,7 @@ class SimplifiedOperatorReducerTestWithParam
  public:
   explicit SimplifiedOperatorReducerTestWithParam(int num_parameters = 1)
       : SimplifiedOperatorReducerTest(num_parameters) {}
-  ~SimplifiedOperatorReducerTestWithParam() override = default;
+  ~SimplifiedOperatorReducerTestWithParam() override {}
 };
 
 
@@ -93,14 +90,31 @@ const int32_t kInt32Values[] = {
     1062628108, 1087581664, 1488498068, 1534668023, 1661587028, 1696896187,
     1866841746, 2032089723, 2147483647};
 
+
+const uint32_t kUint32Values[] = {
+    0x0,        0x5,        0x8,        0xc,        0xd,        0x26,
+    0x28,       0x29,       0x30,       0x34,       0x3e,       0x42,
+    0x50,       0x5b,       0x63,       0x71,       0x77,       0x7c,
+    0x83,       0x88,       0x96,       0x9c,       0xa3,       0xfa,
+    0x7a7,      0x165d,     0x234d,     0x3acb,     0x43a5,     0x4573,
+    0x5b4f,     0x5f14,     0x6996,     0x6c6e,     0x7289,     0x7b9a,
+    0x7bc9,     0x86bb,     0xa839,     0xaa41,     0xb03b,     0xc942,
+    0xce68,     0xcf4c,     0xd3ad,     0xdea3,     0xe90c,     0xed86,
+    0xfba5,     0x172dcc6,  0x114d8fc1, 0x182d6c9d, 0x1b1e3fad, 0x1db033bf,
+    0x1e1de755, 0x1f625c80, 0x28f6cf00, 0x2acb6a94, 0x2c20240e, 0x2f0fe54e,
+    0x31863a7c, 0x33325474, 0x3532fae3, 0x3bab82ea, 0x4c4b83a2, 0x4cd93d1e,
+    0x4f7331d4, 0x5491b09b, 0x57cc6ff9, 0x60d3b4dc, 0x653f5904, 0x690ae256,
+    0x69fe3276, 0x6bebf0ba, 0x6e2c69a3, 0x73b84ff7, 0x7b3a1924, 0x7ed032d9,
+    0x84dd734b, 0x8552ea53, 0x8680754f, 0x8e9660eb, 0x94fe2b9c, 0x972d30cf,
+    0x9b98c482, 0xb158667e, 0xb432932c, 0xb5b70989, 0xb669971a, 0xb7c359d1,
+    0xbeb15c0d, 0xc171c53d, 0xc743dd38, 0xc8e2af50, 0xc98e2df0, 0xd9d1cdf9,
+    0xdcc91049, 0xe46f396d, 0xee991950, 0xef64e521, 0xf7aeefc9, 0xffffffff};
+
+
 const double kNaNs[] = {-std::numeric_limits<double>::quiet_NaN(),
                         std::numeric_limits<double>::quiet_NaN(),
-                        bit_cast<double>(uint64_t{0x7FFFFFFFFFFFFFFF}),
-                        bit_cast<double>(uint64_t{0xFFFFFFFFFFFFFFFF})};
-
-const CheckForMinusZeroMode kCheckForMinusZeroModes[] = {
-    CheckForMinusZeroMode::kDontCheckForMinusZero,
-    CheckForMinusZeroMode::kCheckForMinusZero};
+                        bit_cast<double>(V8_UINT64_C(0x7FFFFFFFFFFFFFFF)),
+                        bit_cast<double>(V8_UINT64_C(0xFFFFFFFFFFFFFFFF))};
 
 }  // namespace
 
@@ -136,71 +150,78 @@ TEST_F(SimplifiedOperatorReducerTest, BooleanNotWithTrueConstant) {
 
 
 // -----------------------------------------------------------------------------
-// ChangeTaggedToBit
+// ChangeBoolToBit
 
-TEST_F(SimplifiedOperatorReducerTest, ChangeBitToTaggedWithChangeTaggedToBit) {
+
+TEST_F(SimplifiedOperatorReducerTest, ChangeBitToBoolWithChangeBoolToBit) {
   Node* param0 = Parameter(0);
   Reduction reduction = Reduce(graph()->NewNode(
-      simplified()->ChangeBitToTagged(),
-      graph()->NewNode(simplified()->ChangeTaggedToBit(), param0)));
+      simplified()->ChangeBitToBool(),
+      graph()->NewNode(simplified()->ChangeBoolToBit(), param0)));
   ASSERT_TRUE(reduction.Changed());
   EXPECT_EQ(param0, reduction.replacement());
 }
 
-TEST_F(SimplifiedOperatorReducerTest, ChangeBitToTaggedWithZeroConstant) {
+
+TEST_F(SimplifiedOperatorReducerTest, ChangeBitToBoolWithZeroConstant) {
   Reduction reduction = Reduce(
-      graph()->NewNode(simplified()->ChangeBitToTagged(), Int32Constant(0)));
+      graph()->NewNode(simplified()->ChangeBitToBool(), Int32Constant(0)));
   ASSERT_TRUE(reduction.Changed());
   EXPECT_THAT(reduction.replacement(), IsFalseConstant());
 }
 
-TEST_F(SimplifiedOperatorReducerTest, ChangeBitToTaggedWithOneConstant) {
+
+TEST_F(SimplifiedOperatorReducerTest, ChangeBitToBoolWithOneConstant) {
   Reduction reduction = Reduce(
-      graph()->NewNode(simplified()->ChangeBitToTagged(), Int32Constant(1)));
+      graph()->NewNode(simplified()->ChangeBitToBool(), Int32Constant(1)));
   ASSERT_TRUE(reduction.Changed());
   EXPECT_THAT(reduction.replacement(), IsTrueConstant());
 }
 
 
 // -----------------------------------------------------------------------------
-// ChangeTaggedToBit
+// ChangeBoolToBit
 
-TEST_F(SimplifiedOperatorReducerTest, ChangeTaggedToBitWithFalseConstant) {
+
+TEST_F(SimplifiedOperatorReducerTest, ChangeBoolToBitWithFalseConstant) {
   Reduction reduction = Reduce(
-      graph()->NewNode(simplified()->ChangeTaggedToBit(), FalseConstant()));
+      graph()->NewNode(simplified()->ChangeBoolToBit(), FalseConstant()));
   ASSERT_TRUE(reduction.Changed());
   EXPECT_THAT(reduction.replacement(), IsInt32Constant(0));
 }
 
-TEST_F(SimplifiedOperatorReducerTest, ChangeTaggedToBitWithTrueConstant) {
-  Reduction reduction = Reduce(
-      graph()->NewNode(simplified()->ChangeTaggedToBit(), TrueConstant()));
+
+TEST_F(SimplifiedOperatorReducerTest, ChangeBoolToBitWithTrueConstant) {
+  Reduction reduction =
+      Reduce(graph()->NewNode(simplified()->ChangeBoolToBit(), TrueConstant()));
   ASSERT_TRUE(reduction.Changed());
   EXPECT_THAT(reduction.replacement(), IsInt32Constant(1));
 }
 
-TEST_F(SimplifiedOperatorReducerTest, ChangeTaggedToBitWithChangeBitToTagged) {
+
+TEST_F(SimplifiedOperatorReducerTest, ChangeBoolToBitWithChangeBitToBool) {
   Node* param0 = Parameter(0);
   Reduction reduction = Reduce(graph()->NewNode(
-      simplified()->ChangeTaggedToBit(),
-      graph()->NewNode(simplified()->ChangeBitToTagged(), param0)));
+      simplified()->ChangeBoolToBit(),
+      graph()->NewNode(simplified()->ChangeBitToBool(), param0)));
   ASSERT_TRUE(reduction.Changed());
   EXPECT_EQ(param0, reduction.replacement());
 }
 
+
 // -----------------------------------------------------------------------------
 // ChangeFloat64ToTagged
 
+
 TEST_F(SimplifiedOperatorReducerTest, ChangeFloat64ToTaggedWithConstant) {
-  TRACED_FOREACH(CheckForMinusZeroMode, mode, kCheckForMinusZeroModes) {
-    TRACED_FOREACH(double, n, kFloat64Values) {
-      Reduction reduction = Reduce(graph()->NewNode(
-          simplified()->ChangeFloat64ToTagged(mode), Float64Constant(n)));
-      ASSERT_TRUE(reduction.Changed());
-      EXPECT_THAT(reduction.replacement(), IsNumberConstant(BitEq(n)));
-    }
+  TRACED_FOREACH(double, n, kFloat64Values) {
+    Reduction reduction = Reduce(graph()->NewNode(
+        simplified()->ChangeFloat64ToTagged(), Float64Constant(n)));
+    ASSERT_TRUE(reduction.Changed());
+    EXPECT_THAT(reduction.replacement(), IsNumberConstant(BitEq(n)));
   }
 }
+
 
 // -----------------------------------------------------------------------------
 // ChangeInt32ToTagged
@@ -223,14 +244,13 @@ TEST_F(SimplifiedOperatorReducerTest, ChangeInt32ToTaggedWithConstant) {
 TEST_F(SimplifiedOperatorReducerTest,
        ChangeTaggedToFloat64WithChangeFloat64ToTagged) {
   Node* param0 = Parameter(0);
-  TRACED_FOREACH(CheckForMinusZeroMode, mode, kCheckForMinusZeroModes) {
-    Reduction reduction = Reduce(graph()->NewNode(
-        simplified()->ChangeTaggedToFloat64(),
-        graph()->NewNode(simplified()->ChangeFloat64ToTagged(mode), param0)));
-    ASSERT_TRUE(reduction.Changed());
-    EXPECT_EQ(param0, reduction.replacement());
-  }
+  Reduction reduction = Reduce(graph()->NewNode(
+      simplified()->ChangeTaggedToFloat64(),
+      graph()->NewNode(simplified()->ChangeFloat64ToTagged(), param0)));
+  ASSERT_TRUE(reduction.Changed());
+  EXPECT_EQ(param0, reduction.replacement());
 }
+
 
 TEST_F(SimplifiedOperatorReducerTest,
        ChangeTaggedToFloat64WithChangeInt32ToTagged) {
@@ -277,17 +297,17 @@ TEST_F(SimplifiedOperatorReducerTest, ChangeTaggedToFloat64WithNaNConstant) {
 // -----------------------------------------------------------------------------
 // ChangeTaggedToInt32
 
+
 TEST_F(SimplifiedOperatorReducerTest,
        ChangeTaggedToInt32WithChangeFloat64ToTagged) {
   Node* param0 = Parameter(0);
-  TRACED_FOREACH(CheckForMinusZeroMode, mode, kCheckForMinusZeroModes) {
-    Reduction reduction = Reduce(graph()->NewNode(
-        simplified()->ChangeTaggedToInt32(),
-        graph()->NewNode(simplified()->ChangeFloat64ToTagged(mode), param0)));
-    ASSERT_TRUE(reduction.Changed());
-    EXPECT_THAT(reduction.replacement(), IsChangeFloat64ToInt32(param0));
-  }
+  Reduction reduction = Reduce(graph()->NewNode(
+      simplified()->ChangeTaggedToInt32(),
+      graph()->NewNode(simplified()->ChangeFloat64ToTagged(), param0)));
+  ASSERT_TRUE(reduction.Changed());
+  EXPECT_THAT(reduction.replacement(), IsChangeFloat64ToInt32(param0));
 }
+
 
 TEST_F(SimplifiedOperatorReducerTest,
        ChangeTaggedToInt32WithChangeInt32ToTagged) {
@@ -300,20 +320,40 @@ TEST_F(SimplifiedOperatorReducerTest,
 }
 
 
+TEST_F(SimplifiedOperatorReducerTest, ChangeTaggedToInt32WithConstant) {
+  TRACED_FOREACH(double, n, kFloat64Values) {
+    Reduction reduction = Reduce(graph()->NewNode(
+        simplified()->ChangeTaggedToInt32(), NumberConstant(n)));
+    ASSERT_TRUE(reduction.Changed());
+    EXPECT_THAT(reduction.replacement(), IsInt32Constant(DoubleToInt32(n)));
+  }
+}
+
+
+TEST_F(SimplifiedOperatorReducerTest, ChangeTaggedToInt32WithNaNConstant) {
+  TRACED_FOREACH(double, nan, kNaNs) {
+    Reduction reduction = Reduce(graph()->NewNode(
+        simplified()->ChangeTaggedToInt32(), NumberConstant(nan)));
+    ASSERT_TRUE(reduction.Changed());
+    EXPECT_THAT(reduction.replacement(), IsInt32Constant(0));
+  }
+}
+
+
 // -----------------------------------------------------------------------------
 // ChangeTaggedToUint32
+
 
 TEST_F(SimplifiedOperatorReducerTest,
        ChangeTaggedToUint32WithChangeFloat64ToTagged) {
   Node* param0 = Parameter(0);
-  TRACED_FOREACH(CheckForMinusZeroMode, mode, kCheckForMinusZeroModes) {
-    Reduction reduction = Reduce(graph()->NewNode(
-        simplified()->ChangeTaggedToUint32(),
-        graph()->NewNode(simplified()->ChangeFloat64ToTagged(mode), param0)));
-    ASSERT_TRUE(reduction.Changed());
-    EXPECT_THAT(reduction.replacement(), IsChangeFloat64ToUint32(param0));
-  }
+  Reduction reduction = Reduce(graph()->NewNode(
+      simplified()->ChangeTaggedToUint32(),
+      graph()->NewNode(simplified()->ChangeFloat64ToTagged(), param0)));
+  ASSERT_TRUE(reduction.Changed());
+  EXPECT_THAT(reduction.replacement(), IsChangeFloat64ToUint32(param0));
 }
+
 
 TEST_F(SimplifiedOperatorReducerTest,
        ChangeTaggedToUint32WithChangeUint32ToTagged) {
@@ -326,237 +366,41 @@ TEST_F(SimplifiedOperatorReducerTest,
 }
 
 
-// -----------------------------------------------------------------------------
-// TruncateTaggedToWord32
-
-TEST_F(SimplifiedOperatorReducerTest,
-       TruncateTaggedToWord3WithChangeFloat64ToTagged) {
-  Node* param0 = Parameter(0);
-  TRACED_FOREACH(CheckForMinusZeroMode, mode, kCheckForMinusZeroModes) {
-    Reduction reduction = Reduce(graph()->NewNode(
-        simplified()->TruncateTaggedToWord32(),
-        graph()->NewNode(simplified()->ChangeFloat64ToTagged(mode), param0)));
-    ASSERT_TRUE(reduction.Changed());
-    EXPECT_THAT(reduction.replacement(), IsTruncateFloat64ToWord32(param0));
-  }
-}
-
-TEST_F(SimplifiedOperatorReducerTest, TruncateTaggedToWord32WithConstant) {
+TEST_F(SimplifiedOperatorReducerTest, ChangeTaggedToUint32WithConstant) {
   TRACED_FOREACH(double, n, kFloat64Values) {
     Reduction reduction = Reduce(graph()->NewNode(
-        simplified()->TruncateTaggedToWord32(), NumberConstant(n)));
+        simplified()->ChangeTaggedToUint32(), NumberConstant(n)));
     ASSERT_TRUE(reduction.Changed());
-    EXPECT_THAT(reduction.replacement(), IsInt32Constant(DoubleToInt32(n)));
+    EXPECT_THAT(reduction.replacement(),
+                IsInt32Constant(bit_cast<int32_t>(DoubleToUint32(n))));
   }
 }
 
-// -----------------------------------------------------------------------------
-// CheckedFloat64ToInt32
 
-TEST_F(SimplifiedOperatorReducerTest, CheckedFloat64ToInt32WithConstant) {
-  Node* effect = graph()->start();
-  Node* control = graph()->start();
-  TRACED_FOREACH(int32_t, n, kInt32Values) {
-    Reduction r = Reduce(graph()->NewNode(
-        simplified()->CheckedFloat64ToInt32(
-            CheckForMinusZeroMode::kDontCheckForMinusZero, FeedbackSource()),
-        Float64Constant(n), effect, control));
-    ASSERT_TRUE(r.Changed());
-    EXPECT_THAT(r.replacement(), IsInt32Constant(n));
-  }
-}
-
-// -----------------------------------------------------------------------------
-// CheckHeapObject
-
-TEST_F(SimplifiedOperatorReducerTest, CheckHeapObjectWithChangeBitToTagged) {
-  Node* param0 = Parameter(0);
-  Node* effect = graph()->start();
-  Node* control = graph()->start();
-  Node* value = graph()->NewNode(simplified()->ChangeBitToTagged(), param0);
-  Reduction reduction = Reduce(graph()->NewNode(simplified()->CheckHeapObject(),
-                                                value, effect, control));
-  ASSERT_TRUE(reduction.Changed());
-  EXPECT_EQ(value, reduction.replacement());
-}
-
-TEST_F(SimplifiedOperatorReducerTest, CheckHeapObjectWithHeapConstant) {
-  Node* effect = graph()->start();
-  Node* control = graph()->start();
-  Handle<HeapObject> kHeapObjects[] = {
-      factory()->empty_string(), factory()->null_value(),
-      factory()->species_symbol(), factory()->undefined_value()};
-  TRACED_FOREACH(Handle<HeapObject>, object, kHeapObjects) {
-    Node* value = HeapConstant(object);
+TEST_F(SimplifiedOperatorReducerTest, ChangeTaggedToUint32WithNaNConstant) {
+  TRACED_FOREACH(double, nan, kNaNs) {
     Reduction reduction = Reduce(graph()->NewNode(
-        simplified()->CheckHeapObject(), value, effect, control));
+        simplified()->ChangeTaggedToUint32(), NumberConstant(nan)));
     ASSERT_TRUE(reduction.Changed());
-    EXPECT_EQ(value, reduction.replacement());
+    EXPECT_THAT(reduction.replacement(), IsInt32Constant(0));
   }
 }
 
-TEST_F(SimplifiedOperatorReducerTest, CheckHeapObjectWithCheckHeapObject) {
-  Node* param0 = Parameter(0);
-  Node* effect = graph()->start();
-  Node* control = graph()->start();
-  Node* value = effect = graph()->NewNode(simplified()->CheckHeapObject(),
-                                          param0, effect, control);
-  Reduction reduction = Reduce(graph()->NewNode(simplified()->CheckHeapObject(),
-                                                value, effect, control));
-  ASSERT_TRUE(reduction.Changed());
-  EXPECT_EQ(value, reduction.replacement());
-}
 
 // -----------------------------------------------------------------------------
-// CheckSmi
+// ChangeUint32ToTagged
 
-TEST_F(SimplifiedOperatorReducerTest, CheckSmiWithChangeInt31ToTaggedSigned) {
-  Node* param0 = Parameter(0);
-  Node* effect = graph()->start();
-  Node* control = graph()->start();
-  Node* value =
-      graph()->NewNode(simplified()->ChangeInt31ToTaggedSigned(), param0);
-  Reduction reduction = Reduce(graph()->NewNode(
-      simplified()->CheckSmi(FeedbackSource()), value, effect, control));
-  ASSERT_TRUE(reduction.Changed());
-  EXPECT_EQ(value, reduction.replacement());
-}
 
-TEST_F(SimplifiedOperatorReducerTest, CheckSmiWithNumberConstant) {
-  Node* effect = graph()->start();
-  Node* control = graph()->start();
-  Node* value = NumberConstant(1.0);
-  Reduction reduction = Reduce(graph()->NewNode(
-      simplified()->CheckSmi(FeedbackSource()), value, effect, control));
-  ASSERT_TRUE(reduction.Changed());
-  EXPECT_EQ(value, reduction.replacement());
-}
-
-TEST_F(SimplifiedOperatorReducerTest, CheckSmiWithCheckSmi) {
-  Node* param0 = Parameter(0);
-  Node* effect = graph()->start();
-  Node* control = graph()->start();
-  Node* value = effect = graph()->NewNode(
-      simplified()->CheckSmi(FeedbackSource()), param0, effect, control);
-  Reduction reduction = Reduce(graph()->NewNode(
-      simplified()->CheckSmi(FeedbackSource()), value, effect, control));
-  ASSERT_TRUE(reduction.Changed());
-  EXPECT_EQ(value, reduction.replacement());
-}
-
-// -----------------------------------------------------------------------------
-// NumberAbs
-
-TEST_F(SimplifiedOperatorReducerTest, NumberAbsWithNumberConstant) {
-  TRACED_FOREACH(double, n, kFloat64Values) {
+TEST_F(SimplifiedOperatorReducerTest, ChangeUint32ToTagged) {
+  TRACED_FOREACH(uint32_t, n, kUint32Values) {
     Reduction reduction =
-        Reduce(graph()->NewNode(simplified()->NumberAbs(), NumberConstant(n)));
+        Reduce(graph()->NewNode(simplified()->ChangeUint32ToTagged(),
+                                Int32Constant(bit_cast<int32_t>(n))));
     ASSERT_TRUE(reduction.Changed());
-    EXPECT_THAT(reduction.replacement(), IsNumberConstant(std::fabs(n)));
+    EXPECT_THAT(reduction.replacement(), IsNumberConstant(BitEq(FastUI2D(n))));
   }
 }
 
-// -----------------------------------------------------------------------------
-// ObjectIsSmi
-
-TEST_F(SimplifiedOperatorReducerTest, ObjectIsSmiWithChangeBitToTagged) {
-  Node* param0 = Parameter(0);
-  Reduction reduction = Reduce(graph()->NewNode(
-      simplified()->ObjectIsSmi(),
-      graph()->NewNode(simplified()->ChangeBitToTagged(), param0)));
-  ASSERT_TRUE(reduction.Changed());
-  EXPECT_THAT(reduction.replacement(), IsFalseConstant());
-}
-
-TEST_F(SimplifiedOperatorReducerTest,
-       ObjectIsSmiWithChangeInt31ToTaggedSigned) {
-  Node* param0 = Parameter(0);
-  Reduction reduction = Reduce(graph()->NewNode(
-      simplified()->ObjectIsSmi(),
-      graph()->NewNode(simplified()->ChangeInt31ToTaggedSigned(), param0)));
-  ASSERT_TRUE(reduction.Changed());
-  EXPECT_THAT(reduction.replacement(), IsTrueConstant());
-}
-
-TEST_F(SimplifiedOperatorReducerTest, ObjectIsSmiWithHeapConstant) {
-  Handle<HeapObject> kHeapObjects[] = {
-      factory()->empty_string(), factory()->null_value(),
-      factory()->species_symbol(), factory()->undefined_value()};
-  TRACED_FOREACH(Handle<HeapObject>, o, kHeapObjects) {
-    Reduction reduction =
-        Reduce(graph()->NewNode(simplified()->ObjectIsSmi(), HeapConstant(o)));
-    ASSERT_TRUE(reduction.Changed());
-    EXPECT_THAT(reduction.replacement(), IsFalseConstant());
-  }
-}
-
-TEST_F(SimplifiedOperatorReducerTest, ObjectIsSmiWithNumberConstant) {
-  TRACED_FOREACH(double, n, kFloat64Values) {
-    Reduction reduction = Reduce(
-        graph()->NewNode(simplified()->ObjectIsSmi(), NumberConstant(n)));
-    ASSERT_TRUE(reduction.Changed());
-    EXPECT_THAT(reduction.replacement(), IsBooleanConstant(IsSmiDouble(n)));
-  }
-}
-
-// -----------------------------------------------------------------------------
-// CheckedInt32Add
-
-TEST_F(SimplifiedOperatorReducerTest,
-       CheckedInt32AddConsecutivelyWithConstants) {
-  Node* p0 = Parameter(0);
-  Node* effect = graph()->start();
-  Node* control = graph()->start();
-  TRACED_FOREACH(int32_t, a, kInt32Values) {
-    TRACED_FOREACH(int32_t, b, kInt32Values) {
-      Node* add1 = graph()->NewNode(simplified()->CheckedInt32Add(), p0,
-                                    Int32Constant(a), effect, control);
-      Node* add2 = graph()->NewNode(simplified()->CheckedInt32Add(), add1,
-                                    Int32Constant(b), add1, control);
-
-      Reduction r = Reduce(add2);
-      int32_t c;
-      bool overflow = base::bits::SignedAddOverflow32(a, b, &c);
-      if ((a >= 0) == (b >= 0) && !overflow) {
-        ASSERT_TRUE(r.Changed());
-        Node* new_node = r.replacement();
-        ASSERT_EQ(new_node->opcode(), IrOpcode::kCheckedInt32Add);
-        ASSERT_EQ(new_node->InputAt(0), p0);
-        EXPECT_THAT(new_node->InputAt(1), IsInt32Constant(c));
-        ASSERT_EQ(new_node->InputAt(2), effect);
-        ASSERT_EQ(new_node->InputAt(3), control);
-        EXPECT_TRUE(add1->uses().empty());
-      } else {
-        ASSERT_FALSE(r.Changed());
-      }
-    }
-  }
-}
-
-TEST_F(SimplifiedOperatorReducerTest,
-       CheckedInt32AddConsecutivelyWithConstantsNoChanged) {
-  Node* p0 = Parameter(0);
-  Node* effect = graph()->start();
-  Node* control = graph()->start();
-  TRACED_FOREACH(int32_t, a, kInt32Values) {
-    TRACED_FOREACH(int32_t, b, kInt32Values) {
-      Node* add1 = graph()->NewNode(simplified()->CheckedInt32Add(), p0,
-                                    Int32Constant(a), effect, control);
-      Node* add2 = graph()->NewNode(simplified()->CheckedInt32Add(), add1,
-                                    Int32Constant(b), add1, control);
-      Node* add3 = graph()->NewNode(simplified()->CheckedInt32Add(), add1,
-                                    Int32Constant(b), effect, control);
-
-      // No changed since add1 has other value uses.
-      Reduction r = Reduce(add2);
-      ASSERT_FALSE(r.Changed());
-      r = Reduce(add3);
-      ASSERT_FALSE(r.Changed());
-    }
-  }
-}
-
-}  // namespace simplified_operator_reducer_unittest
 }  // namespace compiler
 }  // namespace internal
 }  // namespace v8

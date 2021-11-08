@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --allow-natives-syntax --use-osr
+// Flags: --allow-natives-syntax --use-osr --turbo-osr
 
 var counter = 188;
 
 function gen(w) {  // defeat compiler cache.
  var num = counter++;
   var Z = [ "", "", "", ];
-  Z[w] = "%OptimizeOsr(); %PrepareFunctionForOptimization(f" + num + ")";
+  Z[w] = "%OptimizeOsr()";
   var src =
     "function f" + num + "(a,b,c) {" +
     "  var x = 0;" +
@@ -26,7 +26,6 @@ function gen(w) {  // defeat compiler cache.
 function check(x,a,b,c) {
   for (var i = 0; i < 3; i++) {
     var f = gen(i);
-    %PrepareFunctionForOptimization(f);
     assertEquals(x, f(a, b, c));
   }
 }

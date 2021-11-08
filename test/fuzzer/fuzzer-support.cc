@@ -9,31 +9,43 @@
 #include <string.h>
 
 #include "include/libplatform/libplatform.h"
-#include "include/v8-context.h"
-#include "include/v8-initialization.h"
-#include "src/flags/flags.h"
-#include "src/trap-handler/trap-handler.h"
 
 namespace v8_fuzzer {
 
-FuzzerSupport::FuzzerSupport(int* argc, char*** argv) {
-  v8::internal::FLAG_expose_gc = true;
-  v8::V8::SetFlagsFromCommandLine(argc, *argv, true);
-  v8::V8::InitializeICUDefaultLocation((*argv)[0]);
-  v8::V8::InitializeExternalStartupData((*argv)[0]);
-  platform_ = v8::platform::NewDefaultPlatform();
-  v8::V8::InitializePlatform(platform_.get());
-#ifdef V8_VIRTUAL_MEMORY_CAGE
-  if (!v8::V8::InitializeVirtualMemoryCage()) {
-    FATAL("Could not initialize the virtual memory cage");
+namespace {
+
+FuzzerSupport* g_fuzzer_support = nullptr;
+
+void DeleteFuzzerSupport() {
+  if (g_fuzzer_support) {
+    delete g_fuzzer_support;
+    g_fuzzer_support = nullptr;
   }
-#endif
+}
+
+}  // namespace
+
+class FuzzerSupport::ArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
+ public:
+  virtual void* Allocate(size_t length) {
+    void* data = AllocateUninitialized(length);
+    return data == NULL ? data : memset(data, 0, length);
+  }
+  virtual void* AllocateUninitialized(size_t length) { return malloc(length); }
+  virtual void Free(void* data, size_t) { free(data); }
+};
+
+FuzzerSupport::FuzzerSupport(int* argc, char*** argv) {
+  v8::V8::SetFlagsFromCommandLine(argc, *argv, true);
+  v8::V8::InitializeICU();
+  v8::V8::InitializeExternalStartupData((*argv)[0]);
+  platform_ = v8::platform::CreateDefaultPlatform();
+  v8::V8::InitializePlatform(platform_);
   v8::V8::Initialize();
 
-  allocator_ = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
+  allocator_ = new ArrayBufferAllocator;
   v8::Isolate::CreateParams create_params;
   create_params.array_buffer_allocator = allocator_;
-  create_params.allow_atomics_wait = false;
   isolate_ = v8::Isolate::New(create_params);
 
   {
@@ -46,15 +58,13 @@ FuzzerSupport::FuzzerSupport(int* argc, char*** argv) {
 FuzzerSupport::~FuzzerSupport() {
   {
     v8::Isolate::Scope isolate_scope(isolate_);
-    while (PumpMessageLoop()) {
-      // empty
-    }
+    while (v8::platform::PumpMessageLoop(platform_, isolate_)) /* empty */
+      ;
 
     v8::HandleScope handle_scope(isolate_);
     context_.Reset();
   }
 
-  isolate_->LowMemoryNotification();
   isolate_->Dispose();
   isolate_ = nullptr;
 
@@ -63,30 +73,15 @@ FuzzerSupport::~FuzzerSupport() {
 
   v8::V8::Dispose();
   v8::V8::ShutdownPlatform();
-}
 
-std::unique_ptr<FuzzerSupport> FuzzerSupport::fuzzer_support_;
-
-// static
-void FuzzerSupport::InitializeFuzzerSupport(int* argc, char*** argv) {
-#if V8_ENABLE_WEBASSEMBLY
-  if (V8_TRAP_HANDLER_SUPPORTED) {
-    constexpr bool kUseDefaultTrapHandler = true;
-    if (!v8::V8::EnableWebAssemblyTrapHandler(kUseDefaultTrapHandler)) {
-      FATAL("Could not register trap handler");
-    }
-  }
-#endif  // V8_ENABLE_WEBASSEMBLY
-  DCHECK_NULL(FuzzerSupport::fuzzer_support_);
-  FuzzerSupport::fuzzer_support_ =
-      std::make_unique<v8_fuzzer::FuzzerSupport>(argc, argv);
+  delete platform_;
+  platform_ = nullptr;
 }
 
 // static
-FuzzerSupport* FuzzerSupport::Get() {
-  DCHECK_NOT_NULL(FuzzerSupport::fuzzer_support_);
-  return FuzzerSupport::fuzzer_support_.get();
-}
+FuzzerSupport* FuzzerSupport::Get() { return g_fuzzer_support; }
+
+v8::Isolate* FuzzerSupport::GetIsolate() { return isolate_; }
 
 v8::Local<v8::Context> FuzzerSupport::GetContext() {
   v8::Isolate::Scope isolate_scope(isolate_);
@@ -96,21 +91,10 @@ v8::Local<v8::Context> FuzzerSupport::GetContext() {
   return handle_scope.Escape(context);
 }
 
-bool FuzzerSupport::PumpMessageLoop(
-    v8::platform::MessageLoopBehavior behavior) {
-  return v8::platform::PumpMessageLoop(platform_.get(), isolate_, behavior);
-}
-
 }  // namespace v8_fuzzer
 
-// Explicitly specify some attributes to avoid issues with the linker dead-
-// stripping the following function on macOS, as it is not called directly
-// by fuzz target. LibFuzzer runtime uses dlsym() to resolve that function.
-#if V8_OS_MACOSX
-__attribute__((used)) __attribute__((visibility("default")))
-#endif  // V8_OS_MACOSX
-extern "C" int
-LLVMFuzzerInitialize(int* argc, char*** argv) {
-  v8_fuzzer::FuzzerSupport::InitializeFuzzerSupport(argc, argv);
+extern "C" int LLVMFuzzerInitialize(int* argc, char*** argv) {
+  v8_fuzzer::g_fuzzer_support = new v8_fuzzer::FuzzerSupport(argc, argv);
+  atexit(&v8_fuzzer::DeleteFuzzerSupport);
   return 0;
 }

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// Flags: --harmony-sloppy --harmony-sloppy-let
+
 // See: http://code.google.com/p/v8/issues/detail?id=3926
 
 // Switch statements should disable hole check elimination

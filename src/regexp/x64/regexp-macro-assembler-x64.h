@@ -5,170 +5,185 @@
 #ifndef V8_REGEXP_X64_REGEXP_MACRO_ASSEMBLER_X64_H_
 #define V8_REGEXP_X64_REGEXP_MACRO_ASSEMBLER_X64_H_
 
-#include "src/codegen/macro-assembler.h"
+#include "src/macro-assembler.h"
 #include "src/regexp/regexp-macro-assembler.h"
-#include "src/zone/zone-chunk-list.h"
+#include "src/x64/assembler-x64.h"
 
 namespace v8 {
 namespace internal {
 
-class V8_EXPORT_PRIVATE RegExpMacroAssemblerX64
-    : public NativeRegExpMacroAssembler {
+#ifndef V8_INTERPRETED_REGEXP
+
+class RegExpMacroAssemblerX64: public NativeRegExpMacroAssembler {
  public:
   RegExpMacroAssemblerX64(Isolate* isolate, Zone* zone, Mode mode,
                           int registers_to_save);
-  ~RegExpMacroAssemblerX64() override;
-  int stack_limit_slack() override;
-  void AdvanceCurrentPosition(int by) override;
-  void AdvanceRegister(int reg, int by) override;
-  void Backtrack() override;
-  void Bind(Label* label) override;
-  void CheckAtStart(int cp_offset, Label* on_at_start) override;
-  void CheckCharacter(uint32_t c, Label* on_equal) override;
-  void CheckCharacterAfterAnd(uint32_t c, uint32_t mask,
-                              Label* on_equal) override;
-  void CheckCharacterGT(base::uc16 limit, Label* on_greater) override;
-  void CheckCharacterLT(base::uc16 limit, Label* on_less) override;
+  virtual ~RegExpMacroAssemblerX64();
+  virtual int stack_limit_slack();
+  virtual void AdvanceCurrentPosition(int by);
+  virtual void AdvanceRegister(int reg, int by);
+  virtual void Backtrack();
+  virtual void Bind(Label* label);
+  virtual void CheckAtStart(Label* on_at_start);
+  virtual void CheckCharacter(uint32_t c, Label* on_equal);
+  virtual void CheckCharacterAfterAnd(uint32_t c,
+                                      uint32_t mask,
+                                      Label* on_equal);
+  virtual void CheckCharacterGT(uc16 limit, Label* on_greater);
+  virtual void CheckCharacterLT(uc16 limit, Label* on_less);
   // A "greedy loop" is a loop that is both greedy and with a simple
   // body. It has a particularly simple implementation.
-  void CheckGreedyLoop(Label* on_tos_equals_current_position) override;
-  void CheckNotAtStart(int cp_offset, Label* on_not_at_start) override;
-  void CheckNotBackReference(int start_reg, bool read_backward,
-                             Label* on_no_match) override;
-  void CheckNotBackReferenceIgnoreCase(int start_reg, bool read_backward,
-                                       bool unicode,
-                                       Label* on_no_match) override;
-  void CheckNotCharacter(uint32_t c, Label* on_not_equal) override;
-  void CheckNotCharacterAfterAnd(uint32_t c, uint32_t mask,
-                                 Label* on_not_equal) override;
-  void CheckNotCharacterAfterMinusAnd(base::uc16 c, base::uc16 minus,
-                                      base::uc16 mask,
-                                      Label* on_not_equal) override;
-  void CheckCharacterInRange(base::uc16 from, base::uc16 to,
-                             Label* on_in_range) override;
-  void CheckCharacterNotInRange(base::uc16 from, base::uc16 to,
-                                Label* on_not_in_range) override;
-  bool CheckCharacterInRangeArray(const ZoneList<CharacterRange>* ranges,
-                                  Label* on_in_range) override;
-  bool CheckCharacterNotInRangeArray(const ZoneList<CharacterRange>* ranges,
-                                     Label* on_not_in_range) override;
-  void CheckBitInTable(Handle<ByteArray> table, Label* on_bit_set) override;
+  virtual void CheckGreedyLoop(Label* on_tos_equals_current_position);
+  virtual void CheckNotAtStart(int cp_offset, Label* on_not_at_start);
+  virtual void CheckNotBackReference(int start_reg, bool read_backward,
+                                     Label* on_no_match);
+  virtual void CheckNotBackReferenceIgnoreCase(int start_reg,
+                                               bool read_backward, bool unicode,
+                                               Label* on_no_match);
+  virtual void CheckNotCharacter(uint32_t c, Label* on_not_equal);
+  virtual void CheckNotCharacterAfterAnd(uint32_t c,
+                                         uint32_t mask,
+                                         Label* on_not_equal);
+  virtual void CheckNotCharacterAfterMinusAnd(uc16 c,
+                                              uc16 minus,
+                                              uc16 mask,
+                                              Label* on_not_equal);
+  virtual void CheckCharacterInRange(uc16 from,
+                                     uc16 to,
+                                     Label* on_in_range);
+  virtual void CheckCharacterNotInRange(uc16 from,
+                                        uc16 to,
+                                        Label* on_not_in_range);
+  virtual void CheckBitInTable(Handle<ByteArray> table, Label* on_bit_set);
 
   // Checks whether the given offset from the current position is before
   // the end of the string.
-  void CheckPosition(int cp_offset, Label* on_outside_input) override;
-  bool CheckSpecialCharacterClass(StandardCharacterSet type,
-                                  Label* on_no_match) override;
-  void Fail() override;
-  Handle<HeapObject> GetCode(Handle<String> source) override;
-  void GoTo(Label* label) override;
-  void IfRegisterGE(int reg, int comparand, Label* if_ge) override;
-  void IfRegisterLT(int reg, int comparand, Label* if_lt) override;
-  void IfRegisterEqPos(int reg, Label* if_eq) override;
-  IrregexpImplementation Implementation() override;
-  void LoadCurrentCharacterUnchecked(int cp_offset,
-                                     int character_count) override;
-  void PopCurrentPosition() override;
-  void PopRegister(int register_index) override;
-  void PushBacktrack(Label* label) override;
-  void PushCurrentPosition() override;
-  void PushRegister(int register_index,
-                    StackCheckFlag check_stack_limit) override;
-  void ReadCurrentPositionFromRegister(int reg) override;
-  void ReadStackPointerFromRegister(int reg) override;
-  void SetCurrentPositionFromEnd(int by) override;
-  void SetRegister(int register_index, int to) override;
-  bool Succeed() override;
-  void WriteCurrentPositionToRegister(int reg, int cp_offset) override;
-  void ClearRegisters(int reg_from, int reg_to) override;
-  void WriteStackPointerToRegister(int reg) override;
+  virtual void CheckPosition(int cp_offset, Label* on_outside_input);
+  virtual bool CheckSpecialCharacterClass(uc16 type,
+                                          Label* on_no_match);
+  virtual void Fail();
+  virtual Handle<HeapObject> GetCode(Handle<String> source);
+  virtual void GoTo(Label* label);
+  virtual void IfRegisterGE(int reg, int comparand, Label* if_ge);
+  virtual void IfRegisterLT(int reg, int comparand, Label* if_lt);
+  virtual void IfRegisterEqPos(int reg, Label* if_eq);
+  virtual IrregexpImplementation Implementation();
+  virtual void LoadCurrentCharacter(int cp_offset,
+                                    Label* on_end_of_input,
+                                    bool check_bounds = true,
+                                    int characters = 1);
+  virtual void PopCurrentPosition();
+  virtual void PopRegister(int register_index);
+  virtual void PushBacktrack(Label* label);
+  virtual void PushCurrentPosition();
+  virtual void PushRegister(int register_index,
+                            StackCheckFlag check_stack_limit);
+  virtual void ReadCurrentPositionFromRegister(int reg);
+  virtual void ReadStackPointerFromRegister(int reg);
+  virtual void SetCurrentPositionFromEnd(int by);
+  virtual void SetRegister(int register_index, int to);
+  virtual bool Succeed();
+  virtual void WriteCurrentPositionToRegister(int reg, int cp_offset);
+  virtual void ClearRegisters(int reg_from, int reg_to);
+  virtual void WriteStackPointerToRegister(int reg);
+
+  static Result Match(Handle<Code> regexp,
+                      Handle<String> subject,
+                      int* offsets_vector,
+                      int offsets_vector_length,
+                      int previous_index,
+                      Isolate* isolate);
+
+  static Result Execute(Code* code,
+                        String* input,
+                        int start_offset,
+                        const byte* input_start,
+                        const byte* input_end,
+                        int* output,
+                        bool at_start);
 
   // Called from RegExp if the stack-guard is triggered.
   // If the code object is relocated, the return address is fixed before
   // returning.
-  // {raw_code} is an Address because this is called via ExternalReference.
-  static int CheckStackGuardState(Address* return_address, Address raw_code,
+  static int CheckStackGuardState(Address* return_address,
+                                  Code* re_code,
                                   Address re_frame);
 
  private:
   // Offsets from rbp of function parameters and stored registers.
   static const int kFramePointer = 0;
   // Above the frame pointer - function parameters and return address.
-  static const int kReturn_eip = kFramePointer + kSystemPointerSize;
-  static const int kFrameAlign = kReturn_eip + kSystemPointerSize;
+  static const int kReturn_eip = kFramePointer + kRegisterSize;
+  static const int kFrameAlign = kReturn_eip + kRegisterSize;
 
-#ifdef V8_TARGET_OS_WIN
+#ifdef _WIN64
   // Parameters (first four passed as registers, but with room on stack).
   // In Microsoft 64-bit Calling Convention, there is room on the callers
   // stack (before the return address) to spill parameter registers. We
   // use this space to store the register passed parameters.
   static const int kInputString = kFrameAlign;
   // StartIndex is passed as 32 bit int.
-  static const int kStartIndex = kInputString + kSystemPointerSize;
-  static const int kInputStart = kStartIndex + kSystemPointerSize;
-  static const int kInputEnd = kInputStart + kSystemPointerSize;
-  static const int kRegisterOutput = kInputEnd + kSystemPointerSize;
+  static const int kStartIndex = kInputString + kRegisterSize;
+  static const int kInputStart = kStartIndex + kRegisterSize;
+  static const int kInputEnd = kInputStart + kRegisterSize;
+  static const int kRegisterOutput = kInputEnd + kRegisterSize;
   // For the case of global regular expression, we have room to store at least
   // one set of capture results.  For the case of non-global regexp, we ignore
   // this value. NumOutputRegisters is passed as 32-bit value.  The upper
   // 32 bit of this 64-bit stack slot may contain garbage.
-  static const int kNumOutputRegisters = kRegisterOutput + kSystemPointerSize;
+  static const int kNumOutputRegisters = kRegisterOutput + kRegisterSize;
+  static const int kStackHighEnd = kNumOutputRegisters + kRegisterSize;
   // DirectCall is passed as 32 bit int (values 0 or 1).
-  static const int kDirectCall = kNumOutputRegisters + kSystemPointerSize;
-  static const int kIsolate = kDirectCall + kSystemPointerSize;
+  static const int kDirectCall = kStackHighEnd + kRegisterSize;
+  static const int kIsolate = kDirectCall + kRegisterSize;
 #else
   // In AMD64 ABI Calling Convention, the first six integer parameters
   // are passed as registers, and caller must allocate space on the stack
   // if it wants them stored. We push the parameters after the frame pointer.
-  static const int kInputString = kFramePointer - kSystemPointerSize;
-  static const int kStartIndex = kInputString - kSystemPointerSize;
-  static const int kInputStart = kStartIndex - kSystemPointerSize;
-  static const int kInputEnd = kInputStart - kSystemPointerSize;
-  static const int kRegisterOutput = kInputEnd - kSystemPointerSize;
+  static const int kInputString = kFramePointer - kRegisterSize;
+  static const int kStartIndex = kInputString - kRegisterSize;
+  static const int kInputStart = kStartIndex - kRegisterSize;
+  static const int kInputEnd = kInputStart - kRegisterSize;
+  static const int kRegisterOutput = kInputEnd - kRegisterSize;
+
   // For the case of global regular expression, we have room to store at least
   // one set of capture results.  For the case of non-global regexp, we ignore
   // this value.
-  static const int kNumOutputRegisters = kRegisterOutput - kSystemPointerSize;
-
-  static const int kDirectCall = kFrameAlign;
-  static const int kIsolate = kDirectCall + kSystemPointerSize;
+  static const int kNumOutputRegisters = kRegisterOutput - kRegisterSize;
+  static const int kStackHighEnd = kFrameAlign;
+  static const int kDirectCall = kStackHighEnd + kRegisterSize;
+  static const int kIsolate = kDirectCall + kRegisterSize;
 #endif
 
-  // We push callee-save registers that we use after the frame pointer (and
-  // after the parameters).
-#ifdef V8_TARGET_OS_WIN
-  static const int kBackup_rsi = kFramePointer - kSystemPointerSize;
-  static const int kBackup_rdi = kBackup_rsi - kSystemPointerSize;
-  static const int kBackup_rbx = kBackup_rdi - kSystemPointerSize;
-  static const int kNumCalleeSaveRegisters = 3;
+#ifdef _WIN64
+  // Microsoft calling convention has three callee-saved registers
+  // (that we are using). We push these after the frame pointer.
+  static const int kBackup_rsi = kFramePointer - kRegisterSize;
+  static const int kBackup_rdi = kBackup_rsi - kRegisterSize;
+  static const int kBackup_rbx = kBackup_rdi - kRegisterSize;
   static const int kLastCalleeSaveRegister = kBackup_rbx;
 #else
-  static const int kBackup_rbx = kNumOutputRegisters - kSystemPointerSize;
-  static const int kNumCalleeSaveRegisters = 1;
+  // AMD64 Calling Convention has only one callee-save register that
+  // we use. We push this after the frame pointer (and after the
+  // parameters).
+  static const int kBackup_rbx = kNumOutputRegisters - kRegisterSize;
   static const int kLastCalleeSaveRegister = kBackup_rbx;
 #endif
 
+  static const int kSuccessfulCaptures = kLastCalleeSaveRegister - kPointerSize;
   // When adding local variables remember to push space for them in
   // the frame in GetCode.
-  static const int kSuccessfulCaptures =
-      kLastCalleeSaveRegister - kSystemPointerSize;
-  static const int kStringStartMinusOne =
-      kSuccessfulCaptures - kSystemPointerSize;
-  static const int kBacktrackCount = kStringStartMinusOne - kSystemPointerSize;
-  // Stores the initial value of the regexp stack pointer in a
-  // position-independent representation (in case the regexp stack grows and
-  // thus moves).
-  static const int kRegExpStackBasePointer =
-      kBacktrackCount - kSystemPointerSize;
+  static const int kStringStartMinusOne = kSuccessfulCaptures - kPointerSize;
 
   // First register address. Following registers are below it on the stack.
-  static const int kRegisterZero = kRegExpStackBasePointer - kSystemPointerSize;
+  static const int kRegisterZero = kStringStartMinusOne - kPointerSize;
 
   // Initial size of code buffer.
-  static const int kRegExpCodeSize = 1024;
+  static const size_t kRegExpCodeSize = 1024;
 
-  void PushCallerSavedRegisters();
-  void PopCallerSavedRegisters();
+  // Load a number of characters at the given offset from the
+  // current position, into the current-character register.
+  void LoadCurrentCharacterUnchecked(int cp_offset, int character_count);
 
   // Check whether preemption has been requested.
   void CheckPreemption();
@@ -176,31 +191,31 @@ class V8_EXPORT_PRIVATE RegExpMacroAssemblerX64
   // Check whether we are exceeding the stack limit on the backtrack stack.
   void CheckStackLimit();
 
+  // Generate a call to CheckStackGuardState.
   void CallCheckStackGuardState();
-  void CallIsCharacterInRangeArray(const ZoneList<CharacterRange>* ranges);
 
   // The rbp-relative location of a regexp register.
   Operand register_location(int register_index);
 
   // The register containing the current character after LoadCurrentCharacter.
-  static constexpr Register current_character() { return rdx; }
+  inline Register current_character() { return rdx; }
 
   // The register containing the backtrack stack top. Provides a meaningful
   // name to the register.
-  static constexpr Register backtrack_stackpointer() { return rcx; }
+  inline Register backtrack_stackpointer() { return rcx; }
 
   // The registers containing a self pointer to this code's Code object.
-  static constexpr Register code_object_pointer() { return r8; }
+  inline Register code_object_pointer() { return r8; }
 
   // Byte size of chars in the string to match (decided by the Mode argument)
   inline int char_size() { return static_cast<int>(mode_); }
 
   // Equivalent to a conditional branch to the label, unless the label
-  // is nullptr, in which case it is a conditional Backtrack.
+  // is NULL, in which case it is a conditional Backtrack.
   void BranchOrBacktrack(Condition condition, Label* to);
 
   void MarkPositionForCodeRelativeFixup() {
-    code_relative_fixup_positions_.push_back(masm_.pc_offset());
+    code_relative_fixup_positions_.Add(masm_.pc_offset(), zone());
   }
 
   void FixupCodeRelativePositions();
@@ -232,36 +247,24 @@ class V8_EXPORT_PRIVATE RegExpMacroAssemblerX64
   // Increments the stack pointer (rcx) by a word size.
   inline void Drop();
 
-  void LoadRegExpStackPointerFromMemory(Register dst);
-  void StoreRegExpStackPointerToMemory(Register src, Register scratch);
-  void PushRegExpBasePointer(Register scratch_pointer, Register scratch);
-  void PopRegExpBasePointer(Register scratch_pointer_out, Register scratch);
-
   inline void ReadPositionFromRegister(Register dst, int reg);
 
   Isolate* isolate() const { return masm_.isolate(); }
 
   MacroAssembler masm_;
+  MacroAssembler::NoRootArrayScope no_root_array_scope_;
 
-  // On x64, there is no reason to keep the kRootRegister uninitialized; we
-  // could easily use it by 1. initializing it and 2. storing/restoring it
-  // as callee-save on entry/exit.
-  // But: on other platforms, specifically ia32, it would be tricky to enable
-  // the kRootRegister since it's currently used for other purposes. Thus, for
-  // consistency, we also keep it uninitialized here.
-  const NoRootArrayScope no_root_array_scope_;
-
-  ZoneChunkList<int> code_relative_fixup_positions_;
+  ZoneList<int> code_relative_fixup_positions_;
 
   // Which mode to generate code for (LATIN1 or UC16).
-  const Mode mode_;
+  Mode mode_;
 
   // One greater than maximal register index actually used.
   int num_registers_;
 
   // Number of registers to output at the end (the saved registers
   // are always 0..num_saved_registers_-1)
-  const int num_saved_registers_;
+  int num_saved_registers_;
 
   // Labels used internally.
   Label entry_label_;
@@ -271,8 +274,9 @@ class V8_EXPORT_PRIVATE RegExpMacroAssemblerX64
   Label exit_label_;
   Label check_preempt_label_;
   Label stack_overflow_label_;
-  Label fallback_label_;
 };
+
+#endif  // V8_INTERPRETED_REGEXP
 
 }  // namespace internal
 }  // namespace v8

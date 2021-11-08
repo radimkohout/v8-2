@@ -20,7 +20,6 @@ function testAdd(mode) {
 
   if (mode == "fast properties") %ToFastProperties(a);
 
-  %PrepareFunctionForOptimization(push);
   check(push);
   check(push);
   check(push);
@@ -31,7 +30,6 @@ function testAdd(mode) {
     a.unshift(3);
   }
 
-  %PrepareFunctionForOptimization(unshift);
   check(unshift);
   check(unshift);
   check(unshift);
@@ -42,7 +40,6 @@ function testAdd(mode) {
     a.splice(0, 0, 3);
   }
 
-  %PrepareFunctionForOptimization(splice);
   check(splice);
   check(splice);
   check(splice);
@@ -68,7 +65,6 @@ function testRemove(a, mode) {
     a.pop();
   }
 
-  %PrepareFunctionForOptimization(pop);
   check(pop);
   check(pop);
   check(pop);
@@ -79,7 +75,6 @@ function testRemove(a, mode) {
     a.shift();
   }
 
-  %PrepareFunctionForOptimization(shift);
   check(shift);
   check(shift);
   check(shift);
@@ -90,16 +85,15 @@ function testRemove(a, mode) {
     a.splice(0, 1);
   }
 
-  %PrepareFunctionForOptimization(splice);
   check(splice);
   check(splice);
   check(splice);
   %OptimizeFunctionOnNextCall(splice);
   check(splice);
 
-  %ClearFunctionFeedback(pop);
-  %ClearFunctionFeedback(shift);
-  %ClearFunctionFeedback(splice);
+  %ClearFunctionTypeFeedback(pop);
+  %ClearFunctionTypeFeedback(shift);
+  %ClearFunctionTypeFeedback(splice);
 }
 
 for (var i = 0; i < 3; i++) {

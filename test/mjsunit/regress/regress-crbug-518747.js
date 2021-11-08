@@ -4,6 +4,6 @@
 
 if (this.Worker) {
   Worker.prototype = 12;
-  var __v_6 = new Worker('', {type: 'string'});
+  var __v_6 = new Worker('');
   __v_6.postMessage([]);
 }

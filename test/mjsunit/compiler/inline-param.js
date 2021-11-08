@@ -41,7 +41,6 @@ function TestInlineOneParam(o, p) {
   }
 }
 
-%PrepareFunctionForOptimization(TestInlineOneParam);
 var obj = {x:42};
 var o1 = {};
 o1.f = function(o) { return o.x; };
@@ -79,7 +78,6 @@ function TestInlineTwoParams(o, p) {
   }
 }
 
-%PrepareFunctionForOptimization(TestInlineTwoParams);
 var o2 = {};
 o2.h = function(i, j) { return i < j; };
 for (var i = 0; i < 5; i++) TestInlineTwoParams(o2, 42);

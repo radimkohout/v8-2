@@ -2,13 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --allow-natives-syntax
+// Flags: --allow-natives-syntax --array-bounds-checks-elimination
 
 var a = []
 for (var i = 0; i < 9; i++) a[i] = i + 1;
 
 function test(f, arg1, arg2, expected) {
-  %PrepareFunctionForOptimization(f);
   assertEquals(expected, f(arg1));
   f(arg2);
   %OptimizeFunctionOnNextCall(f);

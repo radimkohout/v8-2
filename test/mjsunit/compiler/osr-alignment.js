@@ -25,7 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --allow-natives-syntax --use-osr
+// Flags: --allow-natives-syntax --use-osr --turbo-osr
 
 function f1() {
   var sum = 0;
@@ -66,7 +66,6 @@ function f3() {
 function test1() {
   var j = 11;
   for (var i = 0; i < 2; i++) {
-    %PrepareFunctionForOptimization(f1);
     assertEquals(509500, f1());
   }
 }
@@ -74,7 +73,6 @@ function test1() {
 function test2() {
   for (var i = 0; i < 2; i++) {
     var j = 11, k = 12;
-    %PrepareFunctionForOptimization(f2);
     assertEquals(509500, f2());
   }
 }
@@ -82,7 +80,6 @@ function test2() {
 function test3() {
   for (var i = 0; i < 2; i++) {
     var j = 11, k = 13, m = 14;
-    %PrepareFunctionForOptimization(f3);
     assertEquals(509500, f3());
   }
 }

@@ -25,15 +25,13 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "src/execution/isolate.h"
-#include "src/flags/flags.h"
-#include "src/init/v8.h"
+#include "src/v8.h"
 #include "test/cctest/cctest.h"
 
 #include "src/base/utils/random-number-generator.h"
 
-namespace v8 {
-namespace internal {
+using namespace v8::internal;
+
 
 static const int64_t kRandomSeeds[] = {-1, 1, 42, 100, 1234567890, 987654321};
 
@@ -126,7 +124,7 @@ void RandomBitCorrelation(int random_bit) {
 
       // For 1 degree of freedom this corresponds to 1 in a million.  We are
       // running ~8000 tests, so that would be surprising.
-      CHECK_LE(chi_squared, 24);
+      CHECK(chi_squared <= 24);
 
       // If the predictor bit is a fixed 0 or 1 then it makes no sense to
       // repeat the test with a different age.
@@ -174,6 +172,3 @@ TEST_RANDOM_BIT(30)
 TEST_RANDOM_BIT(31)
 
 #undef TEST_RANDOM_BIT
-
-}  // namespace internal
-}  // namespace v8

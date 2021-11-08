@@ -39,7 +39,6 @@ function f() {
   return pixels[1] + pixels[6];
 }
 
-%PrepareFunctionForOptimization(f);
 f();
 f();
 assertEquals(6, pixels[5]);

@@ -27,16 +27,13 @@
 
 // Flags: --allow-natives-syntax --expose-gc
 
+DontEnum = 2;
+
 var o = {};
-Object.defineProperty(o, "a", {
-    value: 0, configurable: true, writable: true, enumerable: false
-});
+%AddNamedProperty(o, "a", 0, DontEnum);
 
 var o2 = {};
-Object.defineProperty(o2, "a", {
-    value: 0, configurable: true, writable: true, enumerable: false
-});
-
+%AddNamedProperty(o2, "a", 0, DontEnum);
 
 assertTrue(%HaveSameMap(o, o2));
 

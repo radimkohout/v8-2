@@ -35,7 +35,6 @@ function f(n) {
   return f(n - 1) << one;
 }
 
-%PrepareFunctionForOptimization(f);
 
 var one = 1;
 for (var i = 0; i < 5; i++) assertEquals(1 << 5, f(4));

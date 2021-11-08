@@ -30,7 +30,6 @@ function f(e) {
   }
 }
 
-%PrepareFunctionForOptimization(f);
 f(5);
 f(5);
 %OptimizeFunctionOnNextCall(f);

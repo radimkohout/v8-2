@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// Flags: --legacy-const
+
 (function f(){
    assertEquals("function", typeof f);
 })();
@@ -27,4 +29,14 @@ assertEquals("undefined", typeof f);
   }
   assertEquals("undefined", typeof a);
   assertEquals(2, o.a);
+})();
+
+// const initialization is not intercepted by with scope.
+(function() {
+  var o = { a: 1 };
+  with (o) {
+    const a = 2;
+  }
+  assertEquals(2, a);
+  assertEquals(1, o.a);
 })();

@@ -11,7 +11,6 @@ function foo(a) {
     b = a[i];
   }
 }
-%PrepareFunctionForOptimization(foo);
 foo(a);
 foo(a);
 %OptimizeFunctionOnNextCall(foo);

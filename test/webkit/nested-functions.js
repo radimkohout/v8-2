@@ -32,7 +32,7 @@ var passed4 = false;
 
 // Test cases deliberately nested!
 function runTests() {
-    // Formatting of these functions is significant for regression
+    // Formating of these functions is significant for regression
     // testing; functions with small bodies are not cached!
     function test1() { return this; }
     function test2() { "use strict"; return this; }

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --allow-natives-syntax
+// Flags: --harmony-proxies --harmony-reflect --allow-natives-syntax
 
 
 var symbol = %CreatePrivateSymbol("private");
@@ -16,6 +16,7 @@ for (var key of Object.keys(object)) assertUnreachable();
 for (var key of Object.getOwnPropertySymbols(object)) assertUnreachable();
 for (var key of Object.getOwnPropertyNames(object)) assertUnreachable();
 for (var key of Reflect.ownKeys(object)) assertUnreachable();
+for (var key of Reflect.enumerate(object)) assertUnreachable();
 for (var key in object) assertUnreachable();
 
 var object2 = {__proto__: object};
@@ -23,13 +24,13 @@ for (var key of Object.keys(object2)) assertUnreachable();
 for (var key of Object.getOwnPropertySymbols(object2)) assertUnreachable();
 for (var key of Object.getOwnPropertyNames(object2)) assertUnreachable();
 for (var key of Reflect.ownKeys(object2)) assertUnreachable();
+for (var key of Reflect.enumerate(object2)) assertUnreachable();
 for (var key in object2) assertUnreachable();
 
 
 // Private symbols must never leak to proxy traps.
 
-var proxy = new Proxy({}, new Proxy({}, {get() {return () => {
-  throw new Error()}}}));
+var proxy = new Proxy({}, new Proxy({}, {get() {return () => {throw 666}}}));
 var object = {__proto__: proxy};
 
 // [[Set]]

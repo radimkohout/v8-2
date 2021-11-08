@@ -25,7 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --allow-natives-syntax
+// Flags: --allow-natives-syntax --inline-construct
 
 // Test inlining of constructor calls.
 
@@ -35,7 +35,6 @@ function TestInlinedConstructor(constructor, closure) {
   var noDeopt = { deopt:0 };
   var forceDeopt = { /*empty*/ };
 
-  %PrepareFunctionForOptimization(closure);
   result = closure(constructor, 11, noDeopt, counter);
   assertEquals(11, result);
   assertEquals(1, counter.value);
@@ -54,8 +53,8 @@ function TestInlinedConstructor(constructor, closure) {
   assertEquals(4, counter.value);
 
   %DeoptimizeFunction(closure);
-  %ClearFunctionFeedback(closure);
-  %ClearFunctionFeedback(constructor);
+  %ClearFunctionTypeFeedback(closure);
+  %ClearFunctionTypeFeedback(constructor);
 }
 
 function value_context(constructor, val, deopt, counter) {
@@ -120,7 +119,6 @@ function f_too_many(a, b, c) {
   var obj = new c_too_many(a, b, c);
   return obj.x;
 }
-%PrepareFunctionForOptimization(f_too_many);
 assertEquals(23, f_too_many(11, 12, 1));
 assertEquals(42, f_too_many(23, 19, 1));
 %OptimizeFunctionOnNextCall(f_too_many);
@@ -137,7 +135,6 @@ function f_too_few(a) {
   var obj = new c_too_few(a);
   return obj.x;
 }
-%PrepareFunctionForOptimization(f_too_few);
 assertEquals(12, f_too_few(11));
 assertEquals(24, f_too_few(23));
 %OptimizeFunctionOnNextCall(f_too_few);

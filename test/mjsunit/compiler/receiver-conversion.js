@@ -10,7 +10,6 @@
 
 var global = this;
 function test(outer, inner, check) {
-  %PrepareFunctionForOptimization(outer);
   check(outer());
   check(outer());
   %OptimizeFunctionOnNextCall(outer);

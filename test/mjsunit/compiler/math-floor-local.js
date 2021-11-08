@@ -34,7 +34,6 @@ function testFloor(expect, input) {
   var test = new Function('n',
                           '"' + (test_id++) +
                           '";var f = Math.floor; return f(n)');
-  %PrepareFunctionForOptimization(test);
   assertEquals(expect, test(input));
   assertEquals(expect, test(input));
   assertEquals(expect, test(input));
@@ -60,7 +59,6 @@ function test() {
   function ifloor(x) {
     return 1 / Math.floor(x);
   }
-  %PrepareFunctionForOptimization(ifloor);
   assertEquals(-Infinity, ifloor(-0));
   assertEquals(-Infinity, ifloor(-0));
   assertEquals(-Infinity, ifloor(-0));
@@ -157,7 +155,6 @@ function floorsum(i, n) {
   }
   return ret;
 }
-%PrepareFunctionForOptimization(floorsum);
 assertEquals(-0, floorsum(1, -0));
 %OptimizeFunctionOnNextCall(floorsum);
 // The optimized function will deopt.  Run it with enough iterations to try

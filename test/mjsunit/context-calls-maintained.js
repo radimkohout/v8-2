@@ -44,7 +44,6 @@ function clear_all_ics() {
   function f() { foo(1); }
 
   // Drive to monomorphic
-  %PrepareFunctionForOptimization(f);
   f(); f(); f();
 
   delete foo;
@@ -64,7 +63,6 @@ function clear_all_ics() {
 
   foo = function(arg) { return arg * 3; }
   function g() { this.foo(1); }
-  %PrepareFunctionForOptimization(g);
   g(); g(); g();
   delete foo;
   assertThrows(function() { g(); }, TypeError);
@@ -79,8 +77,7 @@ function clear_all_ics() {
 
 // Test: verify that a load with IC does the right thing.
 (function() {
-  var foo = function() { return a; };
-  %PrepareFunctionForOptimization(foo);
+  var foo = function() { return a; }
   a = 3;
   foo(); foo(); foo();
   delete a;
@@ -103,8 +100,7 @@ function clear_all_ics() {
 // if the variable isn't found.
 (function() {
   var foo = function() { a = 3; }
-  var bar = function() { "use strict"; a = 3; };
-  %PrepareFunctionForOptimization(bar);
+  var bar = function() { "use strict"; a = 3; }
   foo(); foo(); foo();
   delete a;
   assertThrows(function() { bar(); }, ReferenceError);

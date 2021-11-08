@@ -28,15 +28,12 @@
 // Tests of profiles generator and utilities.
 
 #include "test/cctest/profiler-extension.h"
-
-#include "include/v8-template.h"
 #include "test/cctest/cctest.h"
 
 namespace v8 {
 namespace internal {
 
-v8::CpuProfiler* ProfilerExtension::profiler_ = nullptr;
-v8::CpuProfile* ProfilerExtension::last_profile = nullptr;
+v8::CpuProfile* ProfilerExtension::last_profile = NULL;
 const char* ProfilerExtension::kSource =
     "native function startProfiling();"
     "native function stopProfiling();"
@@ -44,37 +41,41 @@ const char* ProfilerExtension::kSource =
 
 v8::Local<v8::FunctionTemplate> ProfilerExtension::GetNativeFunctionTemplate(
     v8::Isolate* isolate, v8::Local<v8::String> name) {
-  if (name->StrictEquals(v8_str(isolate, "startProfiling"))) {
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
+  if (name->Equals(context, v8_str(isolate, "startProfiling")).FromJust()) {
     return v8::FunctionTemplate::New(isolate,
                                      ProfilerExtension::StartProfiling);
   }
-  if (name->StrictEquals(v8_str(isolate, "stopProfiling"))) {
+  if (name->Equals(context, v8_str(isolate, "stopProfiling")).FromJust()) {
     return v8::FunctionTemplate::New(isolate, ProfilerExtension::StopProfiling);
   }
-  if (name->StrictEquals(v8_str(isolate, "collectSample"))) {
+  if (name->Equals(context, v8_str(isolate, "collectSample")).FromJust()) {
     return v8::FunctionTemplate::New(isolate, ProfilerExtension::CollectSample);
   }
-  UNREACHABLE();
+  CHECK(false);
+  return v8::Local<v8::FunctionTemplate>();
 }
 
 void ProfilerExtension::StartProfiling(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
-  last_profile = nullptr;
-  profiler_->StartProfiling(args.Length() > 0
-                                ? args[0].As<v8::String>()
-                                : v8::String::Empty(args.GetIsolate()));
+  last_profile = NULL;
+  v8::CpuProfiler* cpu_profiler = args.GetIsolate()->GetCpuProfiler();
+  cpu_profiler->StartProfiling((args.Length() > 0)
+      ? args[0].As<v8::String>()
+      : v8::String::Empty(args.GetIsolate()));
 }
 
 void ProfilerExtension::StopProfiling(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
-  last_profile = profiler_->StopProfiling(
-      args.Length() > 0 ? args[0].As<v8::String>()
-                        : v8::String::Empty(args.GetIsolate()));
+  v8::CpuProfiler* cpu_profiler = args.GetIsolate()->GetCpuProfiler();
+  last_profile = cpu_profiler->StopProfiling((args.Length() > 0)
+      ? args[0].As<v8::String>()
+      : v8::String::Empty(args.GetIsolate()));
 }
 
 void ProfilerExtension::CollectSample(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
-  v8::CpuProfiler::CollectSample(args.GetIsolate());
+  args.GetIsolate()->GetCpuProfiler()->CollectSample();
 }
 
 }  // namespace internal

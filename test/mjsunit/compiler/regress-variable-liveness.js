@@ -17,7 +17,6 @@ function run() {
   }
 }
 
-%PrepareFunctionForOptimization(run);
 assertEquals(void 0, run());
 %OptimizeFunctionOnNextCall(run);
 assertEquals(void 0, run());

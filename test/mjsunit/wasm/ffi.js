@@ -2,41 +2,60 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --expose-wasm --allow-natives-syntax
+// Flags: --expose-wasm
 
-d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
+load("test/mjsunit/wasm/wasm-constants.js");
 
 function testCallFFI(func, check) {
-  var builder = new WasmModuleBuilder();
+  var kBodySize = 6;
+  var kNameFunOffset = 24 + kBodySize + 1;
+  var kNameMainOffset = kNameFunOffset + 4;
 
-  var sig_index = builder.addType(kSig_i_dd);
-  builder.addImport("", "func", sig_index);
-  builder.addFunction("main", sig_index)
-    .addBody([
-      kExprLocalGet, 0,            // --
-      kExprLocalGet, 1,            // --
-      kExprCallFunction, 0  // --
-    ])        // --
-    .exportFunc();
+  var ffi = new Object();
+  ffi.fun = func;
 
-  var main = builder.instantiate({"": {func: func}}).exports.main;
+  var data = bytes(
+    // signatures
+    kDeclSignatures, 1,
+    2, kAstI32, kAstF64, kAstF64, // (f64,f64) -> int
+    // -- foreign function
+    kDeclFunctions, 2,
+    kDeclFunctionName | kDeclFunctionImport,
+    0, 0,
+    kNameFunOffset, 0, 0, 0,    // name offset
+    // -- main function
+    kDeclFunctionName | kDeclFunctionExport,
+    0, 0,
+    kNameMainOffset, 0, 0, 0,   // name offset
+    kBodySize, 0,
+    // main body
+    kExprCallFunction, 0,       // --
+    kExprGetLocal, 0,           // --
+    kExprGetLocal, 1,           // --
+    // names
+    kDeclEnd,
+    'f', 'u', 'n', 0,           //  --
+    'm', 'a', 'i', 'n', 0       //  --
+  );
+
+  var module = _WASMEXP_.instantiateModule(data, ffi);
+
+  assertEquals("function", typeof module.main);
 
   for (var i = 0; i < 100000; i += 10003) {
     var a = 22.5 + i, b = 10.5 + i;
-    var r = main(a, b);
-    if (check) {
-      check(r, a, b);
-    }
+    var r = module.main(a, b);
+    check(r, a, b);
   }
 }
 
 var global = (function() { return this; })();
-var params = [-99, -99, -99, -99, -99];
+var params = [-99, -99, -99, -99];
 var was_called = false;
 var length = -1;
 
 function FOREIGN_SUB(a, b) {
-//  print("FOREIGN_SUB(" + a + ", " + b + ")");
+  print("FOREIGN_SUB(" + a + ", " + b + ")");
   was_called = true;
   params[0] = this;
   params[1] = a;
@@ -53,82 +72,11 @@ function check_FOREIGN_SUB(r, a, b) {
     was_called = false;
 }
 
-// Test calling a normal JSFunction.
-print("JSFunction");
 testCallFFI(FOREIGN_SUB, check_FOREIGN_SUB);
 
-// Test calling a proxy.
-print("Proxy");
-var proxy_sub = new Proxy(FOREIGN_SUB, {});
-testCallFFI(proxy_sub, check_FOREIGN_SUB);
-
-// Test calling a bind function.
-print("Bind function");
-var bind_sub = FOREIGN_SUB.bind();
-testCallFFI(bind_sub, check_FOREIGN_SUB);
-
-(function testCallConstructor() {
-  print(arguments.callee.name);
-  class C {}
-  var builder = new WasmModuleBuilder();
-
-  var sig_index = builder.addType(kSig_i_dd);
-  builder.addImport("", "func", sig_index);
-  builder.addFunction("main", sig_index)
-    .addBody([
-      kExprLocalGet, 0,            // --
-      kExprLocalGet, 1,            // --
-      kExprCallFunction, 0  // --
-    ])        // --
-    .exportFunc();
-
-  let main_for_constructor_test = builder.instantiate({"": {func: C}}).exports.main;
-
-  assertThrows(_ => main_for_constructor_test(12, 43), TypeError);
-}) ();
-
-(function testCallConstructorWithSuperClass() {
-  print(arguments.callee.name);
-  let builder = new WasmModuleBuilder();
-  let sig_index = builder.addType(kSig_v_v);
-  let func_index = builder.addImport('', 'func', sig_index);
-  builder.addExport('exp', func_index);
-
-  class B {}
-  class C extends B {
-    constructor() {
-      super();
-    }
-  };
-  let exports = builder.instantiate({'': {func: C}}).exports;
-  assertThrows(_ => exports.exp(), TypeError);
-})();
-
-(function test_ffi_call_to_native() {
-  print(arguments.callee.name);
-
-  var builder = new WasmModuleBuilder();
-
-  var sig_index = builder.addType(kSig_d_v);
-  builder.addImport("", "func", sig_index);
-  builder.addFunction("main", sig_index)
-    .addBody([
-      kExprCallFunction, 0  // --
-    ])        // --
-    .exportFunc();
-
-  var main = builder.instantiate({"": {func: Object.prototype.toString}}).exports.main;
-  // The result of the call to Object.prototype.toString should be
-  // [object Undefined]. However, we cannot test for this result because wasm
-  // cannot return objects but converts them to float64 in this test.
-  assertEquals(NaN, main());
-})();
-
-print("Callable JSObject");
-testCallFFI(%GetCallable(), function check(r, a, b) {assertEquals(a - b, r);});
 
 function FOREIGN_ABCD(a, b, c, d) {
-//  print("FOREIGN_ABCD(" + a + ", " + b + ", " + c + ", " + d + ")");
+  print("FOREIGN_ABCD(" + a + ", " + b + ", " + c + ", " + d + ")");
   was_called = true;
   params[0] = this;
   params[1] = a;
@@ -239,55 +187,79 @@ var objWithValueOf = {valueOf: function() { return 198; }}
 
 testCallFFI(returnValue(objWithValueOf), checkReturn(198));
 
+
 function testCallBinopVoid(type, func, check) {
+  var kBodySize = 10;
+  var kNameFunOffset = 28 + kBodySize + 1;
+  var kNameMainOffset = kNameFunOffset + 4;
+
+  var ffi = new Object();
+
   var passed_length = -1;
   var passed_a = -1;
   var passed_b = -1;
   var args_a = -1;
   var args_b = -1;
 
-  ffi = {"": {func: function(a, b) {
+  ffi.fun = function(a, b) {
     passed_length = arguments.length;
     passed_a = a;
     passed_b = b;
     args_a = arguments[0];
     args_b = arguments[1];
-  }}};
+  }
 
-  var builder = new WasmModuleBuilder();
+  var data = bytes(
+    // -- signatures
+    kDeclSignatures, 2,
+    2, kAstStmt, type, type,    // (type,type)->void
+    2, kAstI32, type, type,     // (type,type)->int
+    // -- foreign function
+    kDeclFunctions, 2,
+    kDeclFunctionName | kDeclFunctionImport,
+    0, 0,                       // signature index
+    kNameFunOffset, 0, 0, 0,    // name offset
+    // -- main function
+    kDeclFunctionName | kDeclFunctionExport,
+    1, 0,                       // signature index
+    kNameMainOffset, 0, 0, 0,   // name offset
+    kBodySize, 0,               // body size
+    // main body
+    kExprBlock, 2,              // --
+    kExprCallFunction, 0,       // --
+    kExprGetLocal, 0,           // --
+    kExprGetLocal, 1,           // --
+    kExprI8Const, 99,           // --
+    // names
+    kDeclEnd,
+    'f', 'u', 'n', 0,           // --
+    'm', 'a', 'i', 'n', 0       // --
+  );
 
-  builder.addImport("", "func", makeSig_v_xx(type));
-  builder.addFunction("main", makeSig_r_xx(kWasmI32, type))
-    .addBody([
-      kExprLocalGet, 0,            // --
-      kExprLocalGet, 1,            // --
-      kExprCallFunction, 0,        // --
-      kExprI32Const, 33            // --
-    ])                             // --
-    .exportFunc()
+  var module = _WASMEXP_.instantiateModule(data, ffi);
 
-  var main = builder.instantiate(ffi).exports.main;
+  assertEquals("function", typeof module.main);
 
   print("testCallBinopVoid", type);
 
   for (var i = 0; i < 100000; i += 10003.1) {
     var a = 22.5 + i, b = 10.5 + i;
-    var r = main(a, b);
-    assertEquals(33, r);
+    var r = module.main(a, b);
+    assertEquals(99, r);
     assertEquals(2, passed_length);
     var expected_a, expected_b;
     switch (type) {
-      case kWasmI32: {
+      case kAstI32: {
         expected_a = a | 0;
         expected_b = b | 0;
         break;
       }
-      case kWasmF32: {
+      case kAstF32: {
         expected_a = Math.fround(a);
         expected_b = Math.fround(b);
         break;
       }
-      case kWasmF64: {
+      case kAstF64: {
         expected_a = a;
         expected_b = b;
         break;
@@ -302,116 +274,60 @@ function testCallBinopVoid(type, func, check) {
 }
 
 
-testCallBinopVoid(kWasmI32);
-// TODO testCallBinopVoid(kWasmI64);
-testCallBinopVoid(kWasmF32);
-testCallBinopVoid(kWasmF64);
-
-(function testCallPrint() {
-  var builder = new WasmModuleBuilder();
-
-  builder.addImport("", "print", makeSig_v_x(kWasmI32));
-  builder.addImport("", "print", makeSig_v_x(kWasmF64));
-  builder.addFunction("main", makeSig_v_x(kWasmF64))
-    .addBody([
-      kExprI32Const, 37,     // --
-      kExprCallFunction, 0,  // --
-      kExprLocalGet, 0,      // --
-      kExprCallFunction, 1   // --
-    ])                       // --
-    .exportFunc()
-
-  var main = builder.instantiate({"": {print: print}}).exports.main;
-  for (var i = -9; i < 900; i += 6.125) main(i);
-})();
+testCallBinopVoid(kAstI32);
+// TODO testCallBinopVoid(kAstI64);
+testCallBinopVoid(kAstF32);
+testCallBinopVoid(kAstF64);
 
 
-(function testImportNumbers() {
-  print("TestImportNumbers...");
-  var builder = new WasmModuleBuilder();
 
-  builder.addImport("", '0', kSig_v_i);
+function testCallPrint() {
+  var kBodySize = 10;
+  var kNamePrintOffset = 10 + 7 + 7 + 9 + kBodySize + 1;
+  var kNameMainOffset = kNamePrintOffset + 6;
 
-  builder.instantiate({"": {0: print}});
-})();
+  var ffi = new Object();
+  ffi.print = print;
 
-(function testImportNumbers2() {
-  print("TestImportNumbers2...");
-  var builder = new WasmModuleBuilder();
+  var data = bytes(
+    // -- signatures
+    kDeclSignatures, 2,
+    1, kAstStmt, kAstI32,       // i32->void
+    1, kAstStmt, kAstF64,       // f64->int
+    kDeclFunctions, 3,
+    // -- import print i32
+    kDeclFunctionName | kDeclFunctionImport,
+    0, 0,                       // signature index
+    kNamePrintOffset, 0, 0, 0,  // name offset
+    // -- import print f64
+    kDeclFunctionName | kDeclFunctionImport,
+    1, 0,                       // signature index
+    kNamePrintOffset, 0, 0, 0,  // name offset
+    // -- decl main
+    kDeclFunctionName | kDeclFunctionExport,
+    1, 0,                       // signature index
+    kNameMainOffset, 0, 0, 0,   // name offset
+    kBodySize, 0,               // body size
+    // main body
+    kExprBlock, 2,              // --
+    kExprCallFunction, 0,       // --
+    kExprI8Const, 97,           // --
+    kExprCallFunction, 1,       // --
+    kExprGetLocal, 0,           // --
+    // names
+    kDeclEnd,
+    'p', 'r', 'i', 'n', 't', 0, // --
+    'm', 'a', 'i', 'n', 0       // --
+  );
 
-  builder.addImport('foo', '0', kSig_v_i);
-  builder.addImport('0', 'foo', kSig_v_i);
-  builder.addImport('0', '0', kSig_v_i);
-  builder.addImport('18', '-3', kSig_v_i);
-  builder.addImport('-3', '18', kSig_v_i);
+  var module = _WASMEXP_.instantiateModule(data, ffi);
 
-  builder.instantiate({
-    foo: {0: print},
-    0: {0: print, foo: print},
-    18: {'-3': print},
-    '-3': {18: print}
-  });
-})();
+  assertEquals("function", typeof module.main);
 
-(function ImportSymbolAsVoidDoesNotThrow() {
-  print("ImportSymbolAsVoidDoesNotThrow...");
-  var builder = new WasmModuleBuilder();
-  // Return type is void, so there should be no ToNumber conversion.
-  var index = builder.addImport("", "func", kSig_v_v);
-  builder.addFunction("main", kSig_v_v)
-      .addBody([kExprCallFunction, 0])
-      .exportFunc();
-  var func = () => Symbol();
-  var main = builder.instantiate({"": {func: func}}).exports.main;
-  main();
-})();
+  for (var i = -9; i < 900; i += 6.125) {
+      module.main(i);
+  }
+}
 
-(function ToNumberCalledOnImport() {
-  var builder = new WasmModuleBuilder();
-  // Return type is int, so there should be a ToNumber conversion.
-  var index = builder.addImport("", "func", kSig_i_v);
-  builder.addFunction("main", kSig_i_v)
-      .addBody([kExprCallFunction, 0])
-      .exportFunc();
-  var num_valueOf = 0;
-  function Foo() {}
-  Foo.prototype.valueOf = () => ++num_valueOf;
-  var func = () => new Foo();
-  var main = builder.instantiate({"": {func: func}}).exports.main;
-  main();
-  assertEquals(1, num_valueOf);
-  main();
-  assertEquals(2, num_valueOf);
-})();
-
-(function ToNumberNotCalledOnVoidImport() {
-  var builder = new WasmModuleBuilder();
-  // Return type is void, so there should be no ToNumber conversion.
-  var index = builder.addImport("", "func", kSig_v_v);
-  builder.addFunction("main", kSig_v_v)
-      .addBody([kExprCallFunction, 0])
-      .exportFunc();
-  var num_valueOf = 0;
-  function Foo() {}
-  Foo.prototype.valueOf = () => ++num_valueOf;
-  var func = () => new Foo();
-  var main = builder.instantiate({"": {func: func}}).exports.main;
-  main();
-  main();
-  assertEquals(0, num_valueOf);
-})();
-
-(function ImportWithCustomGetter() {
-  print(arguments.callee.name);
-  const builder = new WasmModuleBuilder();
-  builder.addImport("import", "func", kSig_v_v);
-
-  const ffi = {};
-  Object.defineProperty(ffi, 'import', {
-    get: _ => {
-      return {func: () => null };
-    }
-  });
-
-  builder.instantiate(ffi);
-})();
+testCallPrint();
+testCallPrint();

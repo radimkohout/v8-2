@@ -5,322 +5,156 @@
 #ifndef V8_COMPILER_ACCESS_INFO_H_
 #define V8_COMPILER_ACCESS_INFO_H_
 
-#include "src/compiler/heap-refs.h"
-#include "src/compiler/types.h"
-#include "src/zone/zone-containers.h"
+#include <iosfwd>
+
+#include "src/field-index.h"
+#include "src/objects.h"
+#include "src/zone-containers.h"
 
 namespace v8 {
 namespace internal {
 
 // Forward declarations.
+class CompilationDependencies;
 class Factory;
+class TypeCache;
+
 
 namespace compiler {
 
-// Forward declarations.
-class CompilationDependencies;
-class CompilationDependency;
-class ElementAccessFeedback;
-class JSHeapBroker;
-class MinimorphicLoadPropertyAccessFeedback;
-class TypeCache;
-struct ConstFieldInfo;
+// Whether we are loading a property or storing to a property.
+enum class AccessMode { kLoad, kStore };
 
 std::ostream& operator<<(std::ostream&, AccessMode);
+
+
+// Mapping of transition source to transition target.
+typedef std::vector<std::pair<Handle<Map>, Handle<Map>>> MapTransitionList;
+
 
 // This class encapsulates all information required to access a certain element.
 class ElementAccessInfo final {
  public:
-  ElementAccessInfo(ZoneVector<MapRef>&& lookup_start_object_maps,
-                    ElementsKind elements_kind, Zone* zone);
+  ElementAccessInfo();
+  ElementAccessInfo(Type* receiver_type, ElementsKind elements_kind,
+                    MaybeHandle<JSObject> holder);
 
+  MaybeHandle<JSObject> holder() const { return holder_; }
   ElementsKind elements_kind() const { return elements_kind_; }
-  ZoneVector<MapRef> const& lookup_start_object_maps() const {
-    return lookup_start_object_maps_;
-  }
-  ZoneVector<MapRef> const& transition_sources() const {
-    return transition_sources_;
-  }
-
-  void AddTransitionSource(MapRef map) {
-    CHECK_EQ(lookup_start_object_maps_.size(), 1);
-    transition_sources_.push_back(map);
-  }
+  Type* receiver_type() const { return receiver_type_; }
+  MapTransitionList& transitions() { return transitions_; }
+  MapTransitionList const& transitions() const { return transitions_; }
 
  private:
   ElementsKind elements_kind_;
-  ZoneVector<MapRef> lookup_start_object_maps_;
-  ZoneVector<MapRef> transition_sources_;
+  MaybeHandle<JSObject> holder_;
+  Type* receiver_type_;
+  MapTransitionList transitions_;
 };
+
+
+// Additional checks that need to be perform for data field accesses.
+enum class FieldCheck : uint8_t {
+  // No additional checking needed.
+  kNone,
+  // Check that the [[ViewedArrayBuffer]] of {JSArrayBufferView}s
+  // was not neutered.
+  kJSArrayBufferViewBufferNotNeutered,
+};
+
 
 // This class encapsulates all information required to access a certain
 // object property, either on the object itself or on the prototype chain.
 class PropertyAccessInfo final {
  public:
-  enum Kind {
-    kInvalid,
-    kNotFound,
-    kDataField,
-    kFastDataConstant,
-    kDictionaryProtoDataConstant,
-    kFastAccessorConstant,
-    kDictionaryProtoAccessorConstant,
-    kModuleExport,
-    kStringLength
-  };
+  enum Kind { kInvalid, kNotFound, kDataConstant, kDataField };
 
-  static PropertyAccessInfo NotFound(Zone* zone, MapRef receiver_map,
-                                     base::Optional<JSObjectRef> holder);
+  static PropertyAccessInfo NotFound(Type* receiver_type,
+                                     MaybeHandle<JSObject> holder);
+  static PropertyAccessInfo DataConstant(Type* receiver_type,
+                                         Handle<Object> constant,
+                                         MaybeHandle<JSObject> holder);
   static PropertyAccessInfo DataField(
-      Zone* zone, MapRef receiver_map,
-      ZoneVector<CompilationDependency const*>&& unrecorded_dependencies,
-      FieldIndex field_index, Representation field_representation,
-      Type field_type, MapRef field_owner_map, base::Optional<MapRef> field_map,
-      base::Optional<JSObjectRef> holder,
-      base::Optional<MapRef> transition_map);
-  static PropertyAccessInfo FastDataConstant(
-      Zone* zone, MapRef receiver_map,
-      ZoneVector<CompilationDependency const*>&& unrecorded_dependencies,
-      FieldIndex field_index, Representation field_representation,
-      Type field_type, MapRef field_owner_map, base::Optional<MapRef> field_map,
-      base::Optional<JSObjectRef> holder,
-      base::Optional<MapRef> transition_map);
-  static PropertyAccessInfo FastAccessorConstant(
-      Zone* zone, MapRef receiver_map, base::Optional<ObjectRef> constant,
-      base::Optional<JSObjectRef> holder);
-  static PropertyAccessInfo ModuleExport(Zone* zone, MapRef receiver_map,
-                                         CellRef cell);
-  static PropertyAccessInfo StringLength(Zone* zone, MapRef receiver_map);
-  static PropertyAccessInfo Invalid(Zone* zone);
-  static PropertyAccessInfo DictionaryProtoDataConstant(
-      Zone* zone, MapRef receiver_map, JSObjectRef holder,
-      InternalIndex dict_index, NameRef name);
-  static PropertyAccessInfo DictionaryProtoAccessorConstant(
-      Zone* zone, MapRef receiver_map, base::Optional<JSObjectRef> holder,
-      ObjectRef constant, NameRef name);
+      Type* receiver_type, FieldIndex field_index, Type* field_type,
+      FieldCheck field_check = FieldCheck::kNone,
+      MaybeHandle<JSObject> holder = MaybeHandle<JSObject>(),
+      MaybeHandle<Map> transition_map = MaybeHandle<Map>());
 
-  bool Merge(PropertyAccessInfo const* that, AccessMode access_mode,
-             Zone* zone) V8_WARN_UNUSED_RESULT;
+  PropertyAccessInfo();
 
-  void RecordDependencies(CompilationDependencies* dependencies);
-
-  bool IsInvalid() const { return kind() == kInvalid; }
   bool IsNotFound() const { return kind() == kNotFound; }
+  bool IsDataConstant() const { return kind() == kDataConstant; }
   bool IsDataField() const { return kind() == kDataField; }
-  bool IsFastDataConstant() const { return kind() == kFastDataConstant; }
-  bool IsFastAccessorConstant() const {
-    return kind() == kFastAccessorConstant;
-  }
-  bool IsModuleExport() const { return kind() == kModuleExport; }
-  bool IsStringLength() const { return kind() == kStringLength; }
-  bool IsDictionaryProtoDataConstant() const {
-    return kind() == kDictionaryProtoDataConstant;
-  }
-  bool IsDictionaryProtoAccessorConstant() const {
-    return kind() == kDictionaryProtoAccessorConstant;
-  }
 
-  bool HasTransitionMap() const { return transition_map().has_value(); }
-  bool HasDictionaryHolder() const {
-    return kind_ == kDictionaryProtoDataConstant ||
-           kind_ == kDictionaryProtoAccessorConstant;
-  }
-  ConstFieldInfo GetConstFieldInfo() const;
+  bool HasTransitionMap() const { return !transition_map().is_null(); }
 
   Kind kind() const { return kind_; }
-  base::Optional<JSObjectRef> holder() const {
-    // TODO(neis): There was a CHECK here that tries to protect against
-    // using the access info without recording its dependencies first.
-    // Find a more suitable place for it.
-    return holder_;
-  }
-  base::Optional<MapRef> transition_map() const {
-    DCHECK(!HasDictionaryHolder());
-    return transition_map_;
-  }
-  base::Optional<ObjectRef> constant() const {
-    DCHECK_IMPLIES(constant_.has_value(),
-                   IsModuleExport() || IsFastAccessorConstant() ||
-                       IsDictionaryProtoAccessorConstant());
-    return constant_;
-  }
-  FieldIndex field_index() const {
-    DCHECK(!HasDictionaryHolder());
-    return field_index_;
-  }
-
-  Type field_type() const {
-    DCHECK(!HasDictionaryHolder());
-    return field_type_;
-  }
-  Representation field_representation() const {
-    DCHECK(!HasDictionaryHolder());
-    return field_representation_;
-  }
-  base::Optional<MapRef> field_map() const {
-    DCHECK(!HasDictionaryHolder());
-    return field_map_;
-  }
-  ZoneVector<MapRef> const& lookup_start_object_maps() const {
-    return lookup_start_object_maps_;
-  }
-
-  InternalIndex dictionary_index() const {
-    DCHECK(HasDictionaryHolder());
-    return dictionary_index_;
-  }
-
-  NameRef name() const {
-    DCHECK(HasDictionaryHolder());
-    return name_.value();
-  }
+  MaybeHandle<JSObject> holder() const { return holder_; }
+  MaybeHandle<Map> transition_map() const { return transition_map_; }
+  Handle<Object> constant() const { return constant_; }
+  FieldCheck field_check() const { return field_check_; }
+  FieldIndex field_index() const { return field_index_; }
+  Type* field_type() const { return field_type_; }
+  Type* receiver_type() const { return receiver_type_; }
 
  private:
-  explicit PropertyAccessInfo(Zone* zone);
-  PropertyAccessInfo(Zone* zone, Kind kind, base::Optional<JSObjectRef> holder,
-                     ZoneVector<MapRef>&& lookup_start_object_maps);
-  PropertyAccessInfo(Zone* zone, Kind kind, base::Optional<JSObjectRef> holder,
-                     base::Optional<ObjectRef> constant,
-                     base::Optional<NameRef> name,
-                     ZoneVector<MapRef>&& lookup_start_object_maps);
-  PropertyAccessInfo(Kind kind, base::Optional<JSObjectRef> holder,
-                     base::Optional<MapRef> transition_map,
-                     FieldIndex field_index,
-                     Representation field_representation, Type field_type,
-                     MapRef field_owner_map, base::Optional<MapRef> field_map,
-                     ZoneVector<MapRef>&& lookup_start_object_maps,
-                     ZoneVector<CompilationDependency const*>&& dependencies);
-  PropertyAccessInfo(Zone* zone, Kind kind, base::Optional<JSObjectRef> holder,
-                     ZoneVector<MapRef>&& lookup_start_object_maps,
-                     InternalIndex dictionary_index, NameRef name);
+  PropertyAccessInfo(MaybeHandle<JSObject> holder, Type* receiver_type);
+  PropertyAccessInfo(MaybeHandle<JSObject> holder, Handle<Object> constant,
+                     Type* receiver_type);
+  PropertyAccessInfo(MaybeHandle<JSObject> holder,
+                     MaybeHandle<Map> transition_map, FieldIndex field_index,
+                     FieldCheck field_check, Type* field_type,
+                     Type* receiver_type);
 
-  // Members used for fast and dictionary mode holders:
   Kind kind_;
-  ZoneVector<MapRef> lookup_start_object_maps_;
-  base::Optional<ObjectRef> constant_;
-  base::Optional<JSObjectRef> holder_;
-
-  // Members only used for fast mode holders:
-  ZoneVector<CompilationDependency const*> unrecorded_dependencies_;
-  base::Optional<MapRef> transition_map_;
+  Type* receiver_type_;
+  Handle<Object> constant_;
+  MaybeHandle<Map> transition_map_;
+  MaybeHandle<JSObject> holder_;
   FieldIndex field_index_;
-  Representation field_representation_;
-  Type field_type_;
-  base::Optional<MapRef> field_owner_map_;
-  base::Optional<MapRef> field_map_;
-
-  // Members only used for dictionary mode holders:
-  InternalIndex dictionary_index_;
-  base::Optional<NameRef> name_;
+  FieldCheck field_check_;
+  Type* field_type_;
 };
 
-// This class encapsulates information required to generate load properties
-// by only using the information from handlers. This information is used with
-// dynamic map checks.
-class MinimorphicLoadPropertyAccessInfo final {
- public:
-  enum Kind { kInvalid, kDataField };
-  static MinimorphicLoadPropertyAccessInfo DataField(
-      int offset, bool is_inobject, Representation field_representation,
-      Type field_type);
-  static MinimorphicLoadPropertyAccessInfo Invalid();
-
-  bool IsInvalid() const { return kind_ == kInvalid; }
-  bool IsDataField() const { return kind_ == kDataField; }
-  int offset() const { return offset_; }
-  int is_inobject() const { return is_inobject_; }
-  Type field_type() const { return field_type_; }
-  Representation field_representation() const { return field_representation_; }
-
- private:
-  MinimorphicLoadPropertyAccessInfo(Kind kind, int offset, bool is_inobject,
-                                    Representation field_representation,
-                                    Type field_type);
-
-  Kind kind_;
-  bool is_inobject_;
-  int offset_;
-  Representation field_representation_;
-  Type field_type_;
-};
 
 // Factory class for {ElementAccessInfo}s and {PropertyAccessInfo}s.
 class AccessInfoFactory final {
  public:
-  AccessInfoFactory(JSHeapBroker* broker, CompilationDependencies* dependencies,
-                    Zone* zone);
+  AccessInfoFactory(CompilationDependencies* dependencies,
+                    Handle<Context> native_context, Zone* zone);
 
-  base::Optional<ElementAccessInfo> ComputeElementAccessInfo(
-      MapRef map, AccessMode access_mode) const;
-  bool ComputeElementAccessInfos(
-      ElementAccessFeedback const& feedback,
-      ZoneVector<ElementAccessInfo>* access_infos) const;
-
-  PropertyAccessInfo ComputePropertyAccessInfo(MapRef map, NameRef name,
-                                               AccessMode access_mode) const;
-
-  PropertyAccessInfo ComputeDictionaryProtoAccessInfo(
-      MapRef receiver_map, NameRef name, JSObjectRef holder,
-      InternalIndex dict_index, AccessMode access_mode,
-      PropertyDetails details) const;
-
-  MinimorphicLoadPropertyAccessInfo ComputePropertyAccessInfo(
-      MinimorphicLoadPropertyAccessFeedback const& feedback) const;
-
-  // Merge as many of the given {infos} as possible and record any dependencies.
-  // Return false iff any of them was invalid, in which case no dependencies are
-  // recorded.
-  // TODO(neis): Make access_mode part of access info?
-  bool FinalizePropertyAccessInfos(
-      ZoneVector<PropertyAccessInfo> infos, AccessMode access_mode,
-      ZoneVector<PropertyAccessInfo>* result) const;
-
-  // Merge the given {infos} to a single one and record any dependencies. If the
-  // merge is not possible, the result has kind {kInvalid} and no dependencies
-  // are recorded.
-  PropertyAccessInfo FinalizePropertyAccessInfosAsOne(
-      ZoneVector<PropertyAccessInfo> infos, AccessMode access_mode) const;
+  bool ComputeElementAccessInfo(Handle<Map> map, AccessMode access_mode,
+                                ElementAccessInfo* access_info);
+  bool ComputeElementAccessInfos(MapHandleList const& maps,
+                                 AccessMode access_mode,
+                                 ZoneVector<ElementAccessInfo>* access_infos);
+  bool ComputePropertyAccessInfo(Handle<Map> map, Handle<Name> name,
+                                 AccessMode access_mode,
+                                 PropertyAccessInfo* access_info);
+  bool ComputePropertyAccessInfos(MapHandleList const& maps, Handle<Name> name,
+                                  AccessMode access_mode,
+                                  ZoneVector<PropertyAccessInfo>* access_infos);
 
  private:
-  base::Optional<ElementAccessInfo> ConsolidateElementLoad(
-      ElementAccessFeedback const& feedback) const;
-  PropertyAccessInfo LookupSpecialFieldAccessor(MapRef map, NameRef name) const;
-  PropertyAccessInfo LookupTransition(MapRef map, NameRef name,
-                                      base::Optional<JSObjectRef> holder,
-                                      PropertyAttributes attrs) const;
-  PropertyAccessInfo ComputeDataFieldAccessInfo(
-      MapRef receiver_map, MapRef map, base::Optional<JSObjectRef> holder,
-      InternalIndex descriptor, AccessMode access_mode) const;
-  PropertyAccessInfo ComputeAccessorDescriptorAccessInfo(
-      MapRef receiver_map, NameRef name, MapRef map,
-      base::Optional<JSObjectRef> holder, InternalIndex descriptor,
-      AccessMode access_mode) const;
-
-  PropertyAccessInfo Invalid() const {
-    return PropertyAccessInfo::Invalid(zone());
-  }
-
-  void MergePropertyAccessInfos(ZoneVector<PropertyAccessInfo> infos,
-                                AccessMode access_mode,
-                                ZoneVector<PropertyAccessInfo>* result) const;
-
-  bool TryLoadPropertyDetails(MapRef map,
-                              base::Optional<JSObjectRef> maybe_holder,
-                              NameRef name, InternalIndex* index_out,
-                              PropertyDetails* details_out) const;
+  bool LookupSpecialFieldAccessor(Handle<Map> map, Handle<Name> name,
+                                  PropertyAccessInfo* access_info);
+  bool LookupTransition(Handle<Map> map, Handle<Name> name,
+                        MaybeHandle<JSObject> holder,
+                        PropertyAccessInfo* access_info);
 
   CompilationDependencies* dependencies() const { return dependencies_; }
-  JSHeapBroker* broker() const { return broker_; }
-  Isolate* isolate() const;
+  Factory* factory() const;
+  Isolate* isolate() const { return isolate_; }
+  Handle<Context> native_context() const { return native_context_; }
   Zone* zone() const { return zone_; }
 
-  JSHeapBroker* const broker_;
   CompilationDependencies* const dependencies_;
-  TypeCache const* const type_cache_;
+  Handle<Context> const native_context_;
+  Isolate* const isolate_;
+  TypeCache const& type_cache_;
   Zone* const zone_;
 
-  AccessInfoFactory(const AccessInfoFactory&) = delete;
-  AccessInfoFactory& operator=(const AccessInfoFactory&) = delete;
+  DISALLOW_COPY_AND_ASSIGN(AccessInfoFactory);
 };
 
 }  // namespace compiler

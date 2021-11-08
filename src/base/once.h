@@ -54,51 +54,46 @@
 
 #include <stddef.h>
 
-#include <atomic>
-#include <functional>
-
-#include "src/base/base-export.h"
-#include "src/base/template-utils.h"
+#include "src/base/atomicops.h"
 
 namespace v8 {
 namespace base {
 
-using OnceType = std::atomic<uint8_t>;
+typedef AtomicWord OnceType;
 
-#define V8_ONCE_INIT \
-  { 0 }
+#define V8_ONCE_INIT 0
 
 #define V8_DECLARE_ONCE(NAME) ::v8::base::OnceType NAME
 
-enum : uint8_t {
+enum {
   ONCE_STATE_UNINITIALIZED = 0,
   ONCE_STATE_EXECUTING_FUNCTION = 1,
   ONCE_STATE_DONE = 2
 };
 
-using PointerArgFunction = void (*)(void* arg);
+typedef void (*NoArgFunction)();
+typedef void (*PointerArgFunction)(void* arg);
 
-template <typename... Args>
-struct FunctionWithArgs {
-  using type = void (*)(Args...);
+template <typename T>
+struct OneArgFunction {
+  typedef void (*type)(T);
 };
 
-V8_BASE_EXPORT void CallOnceImpl(OnceType* once,
-                                 std::function<void()> init_func);
+void CallOnceImpl(OnceType* once, PointerArgFunction init_func, void* arg);
 
-inline void CallOnce(OnceType* once, std::function<void()> init_func) {
-  if (once->load(std::memory_order_acquire) != ONCE_STATE_DONE) {
-    CallOnceImpl(once, init_func);
+inline void CallOnce(OnceType* once, NoArgFunction init_func) {
+  if (Acquire_Load(once) != ONCE_STATE_DONE) {
+    CallOnceImpl(once, reinterpret_cast<PointerArgFunction>(init_func), NULL);
   }
 }
 
-template <typename... Args, typename = std::enable_if_t<
-                                conjunction<std::is_scalar<Args>...>::value>>
+
+template <typename Arg>
 inline void CallOnce(OnceType* once,
-                     typename FunctionWithArgs<Args...>::type init_func,
-                     Args... args) {
-  if (once->load(std::memory_order_acquire) != ONCE_STATE_DONE) {
-    CallOnceImpl(once, [=]() { init_func(args...); });
+    typename OneArgFunction<Arg*>::type init_func, Arg* arg) {
+  if (Acquire_Load(once) != ONCE_STATE_DONE) {
+    CallOnceImpl(once, reinterpret_cast<PointerArgFunction>(init_func),
+        static_cast<void*>(arg));
   }
 }
 

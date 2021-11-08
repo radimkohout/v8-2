@@ -29,16 +29,14 @@ function deopt(f) {
   };
 }
 
-%PrepareFunctionForOptimization(f);
 assertEquals(false, f(deopt(f)));
 assertEquals(1, counter);
 
-%OptimizeFunctionOnNextCall(f);
-assertEquals(false, f(deopt(f)));
+assertEquals(true, g(deopt(g)));
 assertEquals(2, counter);
 
-%PrepareFunctionForOptimization(g);
-assertEquals(true, g(deopt(g)));
+%OptimizeFunctionOnNextCall(f);
+assertEquals(false, f(deopt(f)));
 assertEquals(3, counter);
 
 %OptimizeFunctionOnNextCall(g);

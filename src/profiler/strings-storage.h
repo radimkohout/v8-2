@@ -5,69 +5,40 @@
 #ifndef V8_PROFILER_STRINGS_STORAGE_H_
 #define V8_PROFILER_STRINGS_STORAGE_H_
 
-#include <stdarg.h>
-
-#include "src/base/compiler-specific.h"
-#include "src/base/hashmap.h"
-#include "src/base/platform/mutex.h"
-#include "src/common/globals.h"
+#include "src/allocation.h"
+#include "src/hashmap.h"
 
 namespace v8 {
 namespace internal {
 
-class Name;
-class Symbol;
-
 // Provides a storage of strings allocated in C++ heap, to hold them
 // forever, even if they disappear from JS heap or external storage.
-class V8_EXPORT_PRIVATE StringsStorage {
+class StringsStorage {
  public:
-  StringsStorage();
+  explicit StringsStorage(Heap* heap);
   ~StringsStorage();
-  StringsStorage(const StringsStorage&) = delete;
-  StringsStorage& operator=(const StringsStorage&) = delete;
 
-  // Copies the given c-string and stores it, returning the stored copy, or just
-  // returns the existing string in storage if it already exists.
   const char* GetCopy(const char* src);
-  // Returns a formatted string, de-duplicated via the storage.
-  PRINTF_FORMAT(2, 3) const char* GetFormatted(const char* format, ...);
-  // Returns a stored string resulting from name, or "<symbol>" for a symbol.
-  const char* GetName(Name name);
-  // Returns the string representation of the int from the store.
+  const char* GetFormatted(const char* format, ...);
+  const char* GetVFormatted(const char* format, va_list args);
+  const char* GetName(Name* name);
   const char* GetName(int index);
-  // Appends string resulting from name to prefix, then returns the stored
-  // result.
-  const char* GetConsName(const char* prefix, Name name);
-  // Reduces the refcount of the given string, freeing it if no other
-  // references are made to it. Returns true if the string was successfully
-  // unref'd, or false if the string was not present in the table.
-  bool Release(const char* str);
-
-  // Returns the number of strings in the store.
-  size_t GetStringCountForTesting() const;
-
-  // Returns the size of strings in the store
-  size_t GetStringSize();
-
-  // Returns true if the strings table is empty.
-  bool empty() const { return names_.occupancy() == 0; }
+  const char* GetFunctionName(Name* name);
+  const char* GetFunctionName(const char* name);
+  size_t GetUsedMemorySize() const;
 
  private:
+  static const int kMaxNameSize = 1024;
+
   static bool StringsMatch(void* key1, void* key2);
-  // Adds the string to storage and returns it, or if a matching string exists
-  // in the storage, deletes str and returns the matching string instead.
   const char* AddOrDisposeString(char* str, int len);
-  base::CustomMatcherHashMap::Entry* GetEntry(const char* str, int len);
-  PRINTF_FORMAT(2, 0)
-  const char* GetVFormatted(const char* format, va_list args);
-  const char* GetSymbol(Symbol sym);
+  HashMap::Entry* GetEntry(const char* str, int len);
 
-  base::CustomMatcherHashMap names_;
-  base::Mutex mutex_;
-  size_t string_size_ = 0;
+  uint32_t hash_seed_;
+  HashMap names_;
+
+  DISALLOW_COPY_AND_ASSIGN(StringsStorage);
 };
-
 }  // namespace internal
 }  // namespace v8
 

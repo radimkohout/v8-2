@@ -38,7 +38,6 @@ function f(x) {
   return v;
 }
 
-%PrepareFunctionForOptimization(f);
 assertEquals(G, f(G));
 assertEquals(G, f(G));
 %OptimizeFunctionOnNextCall(f);

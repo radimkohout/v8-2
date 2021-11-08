@@ -2,11 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "src/codegen/tick-counter.h"
 #include "src/compiler/access-builder.h"
 #include "src/compiler/common-operator.h"
-#include "src/compiler/graph-visualizer.h"
 #include "src/compiler/graph.h"
+#include "src/compiler/graph-visualizer.h"
 #include "src/compiler/js-graph.h"
 #include "src/compiler/js-operator.h"
 #include "src/compiler/loop-analysis.h"
@@ -36,8 +35,7 @@ static const int kNumLeafs = 4;
 class LoopFinderTester : HandleAndZoneScope {
  public:
   LoopFinderTester()
-      : HandleAndZoneScope(kCompressGraphZone),
-        isolate(main_isolate()),
+      : isolate(main_isolate()),
         common(main_zone()),
         graph(main_zone()),
         jsgraph(main_isolate(), &graph, &common, nullptr, nullptr, nullptr),
@@ -47,9 +45,9 @@ class LoopFinderTester : HandleAndZoneScope {
         zero(jsgraph.Int32Constant(0)),
         one(jsgraph.OneConstant()),
         half(jsgraph.Constant(0.5)),
-        self(graph.NewNode(common.Int32Constant(0xAABBCCDD))),
+        self(graph.NewNode(common.Int32Constant(0xaabbccdd))),
         dead(graph.NewNode(common.Dead())),
-        loop_tree(nullptr) {
+        loop_tree(NULL) {
     graph.SetEnd(end);
     graph.SetStart(start);
     leaf[0] = zero;
@@ -59,7 +57,6 @@ class LoopFinderTester : HandleAndZoneScope {
   }
 
   Isolate* isolate;
-  TickCounter tick_counter;
   CommonOperatorBuilder common;
   Graph graph;
   JSGraph jsgraph;
@@ -119,18 +116,19 @@ class LoopFinderTester : HandleAndZoneScope {
   }
 
   Node* Return(Node* val, Node* effect, Node* control) {
-    Node* ret = graph.NewNode(common.Return(), zero, val, effect, control);
+    Node* ret = graph.NewNode(common.Return(), val, effect, control);
     end->ReplaceInput(0, ret);
     return ret;
   }
 
   LoopTree* GetLoopTree() {
-    if (loop_tree == nullptr) {
+    if (loop_tree == NULL) {
       if (FLAG_trace_turbo_graph) {
-        StdoutStream{} << AsRPO(graph);
+        OFStream os(stdout);
+        os << AsRPO(graph);
       }
-      Zone zone(main_isolate()->allocator(), ZONE_NAME);
-      loop_tree = LoopFinder::BuildLoopTree(&graph, &tick_counter, &zone);
+      Zone zone;
+      loop_tree = LoopFinder::BuildLoopTree(&graph, &zone);
     }
     return loop_tree;
   }
@@ -169,7 +167,7 @@ class LoopFinderTester : HandleAndZoneScope {
       CHECK(loop);
       // Check parentage.
       LoopTree::Loop* parent =
-          i == 0 ? nullptr : tree->ContainingLoop(chain[i - 1]);
+          i == 0 ? NULL : tree->ContainingLoop(chain[i - 1]);
       CHECK_EQ(parent, loop->parent());
       for (int j = i - 1; j >= 0; j--) {
         // This loop should be nested inside all the outer loops.
@@ -201,9 +199,9 @@ struct While {
   }
 
   void chain(Node* control) { loop->ReplaceInput(0, control); }
-  void nest(While* that) {
-    that->loop->ReplaceInput(1, exit);
-    this->loop->ReplaceInput(0, that->if_true);
+  void nest(While& that) {
+    that.loop->ReplaceInput(1, exit);
+    this->loop->ReplaceInput(0, that.if_true);
   }
 };
 
@@ -214,17 +212,16 @@ struct Counter {
   Node* phi;
   Node* add;
 
-  Counter(While* w, int32_t b, int32_t k)
-      : base(w->t.jsgraph.Int32Constant(b)),
-        inc(w->t.jsgraph.Int32Constant(k)) {
+  Counter(While& w, int32_t b, int32_t k)
+      : base(w.t.jsgraph.Int32Constant(b)), inc(w.t.jsgraph.Int32Constant(k)) {
     Build(w);
   }
 
-  Counter(While* w, Node* b, Node* k) : base(b), inc(k) { Build(w); }
+  Counter(While& w, Node* b, Node* k) : base(b), inc(k) { Build(w); }
 
-  void Build(While* w) {
-    phi = w->t.graph.NewNode(w->t.op(2, false), base, base, w->loop);
-    add = w->t.graph.NewNode(&kIntAdd, phi, inc);
+  void Build(While& w) {
+    phi = w.t.graph.NewNode(w.t.op(2, false), base, base, w.loop);
+    add = w.t.graph.NewNode(&kIntAdd, phi, inc);
     phi->ReplaceInput(1, add);
   }
 };
@@ -236,16 +233,16 @@ struct StoreLoop {
   Node* phi;
   Node* store;
 
-  explicit StoreLoop(While* w)
-      : base(w->t.graph.start()), val(w->t.jsgraph.Int32Constant(13)) {
+  explicit StoreLoop(While& w)
+      : base(w.t.graph.start()), val(w.t.jsgraph.Int32Constant(13)) {
     Build(w);
   }
 
-  StoreLoop(While* w, Node* b, Node* v) : base(b), val(v) { Build(w); }
+  StoreLoop(While& w, Node* b, Node* v) : base(b), val(v) { Build(w); }
 
-  void Build(While* w) {
-    phi = w->t.graph.NewNode(w->t.op(2, true), base, base, w->loop);
-    store = w->t.graph.NewNode(&kStore, val, phi, w->loop);
+  void Build(While& w) {
+    phi = w.t.graph.NewNode(w.t.op(2, true), base, base, w.loop);
+    store = w.t.graph.NewNode(&kStore, val, phi, w.loop);
     phi->ReplaceInput(1, store);
   }
 };
@@ -287,7 +284,7 @@ TEST(LaLoop1c) {
   // One loop with a counter.
   LoopFinderTester t;
   While w(t, t.p0);
-  Counter c(&w, 0, 1);
+  Counter c(w, 0, 1);
   t.Return(c.phi, t.start, w.exit);
 
   Node* chain[] = {w.loop};
@@ -303,7 +300,7 @@ TEST(LaLoop1e) {
   // One loop with an effect phi.
   LoopFinderTester t;
   While w(t, t.p0);
-  StoreLoop c(&w);
+  StoreLoop c(w);
   t.Return(t.p0, c.phi, w.exit);
 
   Node* chain[] = {w.loop};
@@ -319,8 +316,8 @@ TEST(LaLoop1d) {
   // One loop with two counters.
   LoopFinderTester t;
   While w(t, t.p0);
-  Counter c1(&w, 0, 1);
-  Counter c2(&w, 1, 1);
+  Counter c1(w, 0, 1);
+  Counter c2(w, 1, 1);
   t.Return(t.graph.NewNode(&kIntAdd, c1.phi, c2.phi), t.start, w.exit);
 
   Node* chain[] = {w.loop};
@@ -365,8 +362,8 @@ TEST(LaLoop2c) {
   LoopFinderTester t;
   While w1(t, t.p0);
   While w2(t, t.p0);
-  Counter c1(&w1, 0, 1);
-  Counter c2(&w2, 0, 1);
+  Counter c1(w1, 0, 1);
+  Counter c2(w2, 0, 1);
   w2.chain(w1.exit);
   t.Return(t.graph.NewNode(&kIntAdd, c1.phi, c2.phi), t.start, w2.exit);
 
@@ -396,10 +393,10 @@ TEST(LaLoop2cc) {
     LoopFinderTester t;
     While w1(t, t.p0);
     While w2(t, t.p0);
-    Counter c1(&w1, 0, 1);
+    Counter c1(w1, 0, 1);
 
     // various usage scenarios for the second loop.
-    Counter c2(&w2, i & 1 ? t.p0 : c1.phi, i & 2 ? t.p0 : c1.phi);
+    Counter c2(w2, i & 1 ? t.p0 : c1.phi, i & 2 ? t.p0 : c1.phi);
     if (i & 3) w2.branch->ReplaceInput(0, c1.phi);
 
     w2.chain(w1.exit);
@@ -431,7 +428,7 @@ TEST(LaNestedLoop1) {
   LoopFinderTester t;
   While w1(t, t.p0);
   While w2(t, t.p0);
-  w2.nest(&w1);
+  w2.nest(w1);
   t.Return(t.p0, t.start, w1.exit);
 
   Node* chain[] = {w1.loop, w2.loop};
@@ -452,10 +449,10 @@ TEST(LaNestedLoop1c) {
   LoopFinderTester t;
   While w1(t, t.p0);
   While w2(t, t.p0);
-  Counter c1(&w1, 0, 1);
-  Counter c2(&w2, 0, 1);
+  Counter c1(w1, 0, 1);
+  Counter c2(w2, 0, 1);
   w2.branch->ReplaceInput(0, c2.phi);
-  w2.nest(&w1);
+  w2.nest(w1);
   t.Return(c1.phi, t.start, w1.exit);
 
   Node* chain[] = {w1.loop, w2.loop};
@@ -477,7 +474,7 @@ TEST(LaNestedLoop1x) {
   LoopFinderTester t;
   While w1(t, t.p0);
   While w2(t, t.p0);
-  w2.nest(&w1);
+  w2.nest(w1);
 
   const Operator* op = t.common.Phi(MachineRepresentation::kWord32, 2);
   Node* p1a = t.graph.NewNode(op, t.p0, t.p0, w1.loop);
@@ -513,8 +510,8 @@ TEST(LaNestedLoop2) {
   While w1(t, t.p0);
   While w2(t, t.p0);
   While w3(t, t.p0);
-  w2.nest(&w1);
-  w3.nest(&w1);
+  w2.nest(w1);
+  w3.nest(w1);
   w3.chain(w2.exit);
   t.Return(t.p0, t.start, w1.exit);
 
@@ -573,11 +570,11 @@ TEST(LaNestedLoop3c) {
   // Three nested loops with counters.
   LoopFinderTester t;
   While w1(t, t.p0);
-  Counter c1(&w1, 0, 1);
+  Counter c1(w1, 0, 1);
   While w2(t, t.p0);
-  Counter c2(&w2, 0, 1);
+  Counter c2(w2, 0, 1);
   While w3(t, t.p0);
-  Counter c3(&w3, 0, 1);
+  Counter c3(w3, 0, 1);
   w2.loop->ReplaceInput(0, w1.if_true);
   w3.loop->ReplaceInput(0, w2.if_true);
   w2.loop->ReplaceInput(1, w3.exit);
@@ -699,8 +696,7 @@ TEST(LaEdgeMatrix1) {
         Node* if_true = t.graph.NewNode(t.common.IfTrue(), branch);
         Node* exit = t.graph.NewNode(t.common.IfFalse(), branch);
         loop->ReplaceInput(1, if_true);
-        Node* zero = t.graph.NewNode(t.common.Int32Constant(0));
-        Node* ret = t.graph.NewNode(t.common.Return(), zero, p3, t.start, exit);
+        Node* ret = t.graph.NewNode(t.common.Return(), p3, t.start, exit);
         t.graph.SetEnd(ret);
 
         Node* choices[] = {p1, phi, cond};
@@ -747,9 +743,7 @@ void RunEdgeMatrix2(int i) {
       loop2->ReplaceInput(1, if_true2);
       loop1->ReplaceInput(1, exit2);
 
-      Node* zero = t.graph.NewNode(t.common.Int32Constant(0));
-      Node* ret =
-          t.graph.NewNode(t.common.Return(), zero, phi1, t.start, exit1);
+      Node* ret = t.graph.NewNode(t.common.Return(), phi1, t.start, exit1);
       t.graph.SetEnd(ret);
 
       Node* choices[] = {p1, phi1, cond1, phi2, cond2};
@@ -836,8 +830,7 @@ void RunEdgeMatrix3(int c1a, int c1b, int c1c,    // line break
   loop2->ReplaceInput(1, exit3);
   loop1->ReplaceInput(1, exit2);
 
-  Node* zero = t.graph.NewNode(t.common.Int32Constant(0));
-  Node* ret = t.graph.NewNode(t.common.Return(), zero, phi1, t.start, exit1);
+  Node* ret = t.graph.NewNode(t.common.Return(), phi1, t.start, exit1);
   t.graph.SetEnd(ret);
 
   // Mutate the graph according to the edge choices.
@@ -950,8 +943,7 @@ static void RunManyChainedLoops_i(int count) {
     last = exit;
   }
 
-  Node* zero = t.graph.NewNode(t.common.Int32Constant(0));
-  Node* ret = t.graph.NewNode(t.common.Return(), zero, t.p0, t.start, last);
+  Node* ret = t.graph.NewNode(t.common.Return(), t.p0, t.start, last);
   t.graph.SetEnd(ret);
 
   // Verify loops.
@@ -970,7 +962,6 @@ static void RunManyNestedLoops_i(int count) {
   Node* entry = t.start;
 
   // Build loops.
-  Node* zero = t.graph.NewNode(t.common.Int32Constant(0));
   for (int i = 0; i < count; i++) {
     Node* loop = t.graph.NewNode(t.common.Loop(2), entry, t.start);
     Node* phi = t.graph.NewNode(t.common.Phi(MachineRepresentation::kWord32, 2),
@@ -990,7 +981,7 @@ static void RunManyNestedLoops_i(int count) {
       outer->ReplaceInput(1, exit);
     } else {
       // outer loop.
-      Node* ret = t.graph.NewNode(t.common.Return(), zero, t.p0, t.start, exit);
+      Node* ret = t.graph.NewNode(t.common.Return(), t.p0, t.start, exit);
       t.graph.SetEnd(ret);
     }
     outer = loop;

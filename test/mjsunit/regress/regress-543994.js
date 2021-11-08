@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --allow-natives-syntax --always-opt --gc-interval=163 --stress-compaction
+// Flass: --allow-natives-syntax --always-opt --gc-interval=163 --stress-compaction
 
 try { a = f();
 } catch(e) {

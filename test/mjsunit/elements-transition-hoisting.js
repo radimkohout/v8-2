@@ -26,7 +26,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Flags: --allow-natives-syntax
-// Flags: --nostress-opt --opt
+// Flags: --nostress-opt
 
 // Ensure that ElementsKind transitions in various situations are hoisted (or
 // not hoisted) correctly, don't change the semantics programs and don't trigger
@@ -45,7 +45,6 @@ function test_wrapper() {
     } while (--count > 0);
   }
 
-  %PrepareFunctionForOptimization(testDoubleConversion4);
   testDoubleConversion4(new Array(5));
   testDoubleConversion4(new Array(5));  // Call twice to make sure that second
                                         // store is a transition and not
@@ -54,7 +53,7 @@ function test_wrapper() {
   testDoubleConversion4(new Array(5));
   testDoubleConversion4(new Array(5));
   assertOptimized(testDoubleConversion4);
-  %ClearFunctionFeedback(testDoubleConversion4);
+  %ClearFunctionTypeFeedback(testDoubleConversion4);
 
   // Make sure that non-element related map checks that are not preceded by
   // transitions in a loop still get hoisted in a way that doesn't generate a
@@ -72,7 +71,6 @@ function test_wrapper() {
     } while (--count > 0);
   }
 
-  %PrepareFunctionForOptimization(testExactMapHoisting);
   testExactMapHoisting(new Array(5));
   testExactMapHoisting(new Array(5));  // Call twice to make sure that second
                                        // store is a transition and not
@@ -81,7 +79,7 @@ function test_wrapper() {
   testExactMapHoisting(new Array(5));
   testExactMapHoisting(new Array(5));
   assertOptimized(testExactMapHoisting);
-  %ClearFunctionFeedback(testExactMapHoisting);
+  %ClearFunctionTypeFeedback(testExactMapHoisting);
 
   // Make sure that non-element related map checks do NOT get hoisted if they
   // depend on an elements transition before them and it's not possible to hoist
@@ -97,14 +95,13 @@ function test_wrapper() {
         a[1] = 2.5;
       }
       a.foo = object;  // This map check should NOT be hoistable because it
-                       // includes a check for the PACKED_ELEMENTS map as well as
-                       // the PACKED_DOUBLE_ELEMENTS map, which depends on the
+                       // includes a check for the FAST_ELEMENTS map as well as
+                       // the FAST_DOUBLE_ELEMENTS map, which depends on the
                        // double transition above in the if, which cannot be
                        // hoisted.
     } while (--count > 0);
   }
 
-  %PrepareFunctionForOptimization(testExactMapHoisting2);
   testExactMapHoisting2(new Array(5));
   testExactMapHoisting2(new Array(5));  // Call twice to make sure that second
                                         // store is a transition and not
@@ -114,7 +111,7 @@ function test_wrapper() {
   testExactMapHoisting2(new Array(5));
   // Temporarily disabled - see bug 2176.
   // assertOptimized(testExactMapHoisting2);
-  %ClearFunctionFeedback(testExactMapHoisting2);
+  %ClearFunctionTypeFeedback(testExactMapHoisting2);
 
   // Make sure that non-element related map checks do get hoisted if they use
   // the transitioned map for the check and all transitions that they depend
@@ -132,7 +129,6 @@ function test_wrapper() {
     } while (--count > 0);
   }
 
-  %PrepareFunctionForOptimization(testExactMapHoisting3);
   var add_transition = new Array(5);
   add_transition.foo = 0;
   add_transition[0] = new Object();  // For FAST_ELEMENT transition to be created
@@ -144,7 +140,7 @@ function test_wrapper() {
   testExactMapHoisting3(new Array(5));
   testExactMapHoisting3(new Array(5));
   assertOptimized(testExactMapHoisting3);
-  %ClearFunctionFeedback(testExactMapHoisting3);
+  %ClearFunctionTypeFeedback(testExactMapHoisting3);
 
   function testDominatingTransitionHoisting1(a) {
     var object = new Object();
@@ -159,7 +155,6 @@ function test_wrapper() {
   }
 
   /*
-  %PrepareFunctionForOptimization(testDominatingTransitionHoisting1);
   testDominatingTransitionHoisting1(new Array(5));
   testDominatingTransitionHoisting1(new Array(5));  // Call twice to make sure
                                                     // that second store is a
@@ -172,7 +167,7 @@ function test_wrapper() {
   // above the access, causing a deopt. We should update the type of access
   // rather than forbid hoisting the transition.
   assertOptimized(testDominatingTransitionHoisting1);
-  %ClearFunctionFeedback(testDominatingTransitionHoisting1);
+  %ClearFunctionTypeFeedback(testDominatingTransitionHoisting1);
   */
 
   function testHoistingWithSideEffect(a) {
@@ -185,7 +180,6 @@ function test_wrapper() {
     } while (--count > 3);
   }
 
-  %PrepareFunctionForOptimization(testHoistingWithSideEffect);
   testHoistingWithSideEffect(new Array(5));
   testHoistingWithSideEffect(new Array(5));  // Call twice to make sure that
                                              // second store is a transition and
@@ -194,7 +188,7 @@ function test_wrapper() {
   testHoistingWithSideEffect(new Array(5));
   testHoistingWithSideEffect(new Array(5));
   assertOptimized(testHoistingWithSideEffect);
-  %ClearFunctionFeedback(testHoistingWithSideEffect);
+  %ClearFunctionTypeFeedback(testHoistingWithSideEffect);
 
   function testStraightLineDupeElinination(a,b,c,d,e,f) {
     var count = 3;
@@ -209,7 +203,6 @@ function test_wrapper() {
     } while (--count > 3);
   }
 
-  %PrepareFunctionForOptimization(testStraightLineDupeElinination);
   testStraightLineDupeElinination(new Array(0, 0, 0, 0, 0),0,0,0,0,.5);
   testStraightLineDupeElinination(new Array(0, 0, 0, 0, 0),0,0,0,.5,0);
   testStraightLineDupeElinination(new Array(0, 0, 0, 0, 0),0,0,.5,0,0);
@@ -234,10 +227,10 @@ function test_wrapper() {
   testStraightLineDupeElinination(new Array(5),0,0,0,0,0);
   testStraightLineDupeElinination(new Array(5),0,0,0,0,0);
   assertOptimized(testStraightLineDupeElinination);
-  %ClearFunctionFeedback(testStraightLineDupeElinination);
+  %ClearFunctionTypeFeedback(testStraightLineDupeElinination);
 }
 
 // The test is called in a test wrapper that has type feedback cleared to
 // prevent the influence of allocation-sites, which learn from transitions.
 test_wrapper();
-%ClearFunctionFeedback(test_wrapper);
+%ClearFunctionTypeFeedback(test_wrapper);

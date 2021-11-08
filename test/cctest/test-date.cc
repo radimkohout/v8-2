@@ -25,14 +25,12 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "src/date/date.h"
-#include "src/execution/isolate.h"
-#include "src/handles/global-handles.h"
-#include "src/init/v8.h"
+#include "src/v8.h"
+
+#include "src/global-handles.h"
 #include "test/cctest/cctest.h"
 
-namespace v8 {
-namespace internal {
+using namespace v8::internal;
 
 class DateCacheMock: public DateCache {
  public:
@@ -44,22 +42,23 @@ class DateCacheMock: public DateCache {
       : local_offset_(local_offset), rules_(rules), rules_count_(rules_count) {}
 
  protected:
-  int GetDaylightSavingsOffsetFromOS(int64_t time_sec) override {
+  virtual int GetDaylightSavingsOffsetFromOS(int64_t time_sec) {
     int days = DaysFromTime(time_sec * 1000);
     int time_in_day_sec = TimeInDay(time_sec * 1000, days) / 1000;
     int year, month, day;
     YearMonthDayFromDays(days, &year, &month, &day);
     Rule* rule = FindRuleFor(year, month, day, time_in_day_sec);
-    return rule == nullptr ? 0 : rule->offset_sec * 1000;
+    return rule == NULL ? 0 : rule->offset_sec * 1000;
   }
 
-  int GetLocalOffsetFromOS(int64_t time_sec, bool is_utc) override {
-    return local_offset_ + GetDaylightSavingsOffsetFromOS(time_sec);
+
+  virtual int GetLocalOffsetFromOS() {
+    return local_offset_;
   }
 
  private:
   Rule* FindRuleFor(int year, int month, int day, int time_in_day_sec) {
-    Rule* result = nullptr;
+    Rule* result = NULL;
     for (int i = 0; i < rules_count_; i++)
       if (Match(&rules_[i], year, month, day, time_in_day_sec)) {
         result = &rules_[i];
@@ -112,7 +111,8 @@ static void CheckDST(int64_t time) {
   Isolate* isolate = CcTest::i_isolate();
   DateCache* date_cache = isolate->date_cache();
   int64_t actual = date_cache->ToLocal(time);
-  int64_t expected = time + date_cache->GetLocalOffsetFromOS(time, true);
+  int64_t expected = time + date_cache->GetLocalOffsetFromOS() +
+                     date_cache->GetDaylightSavingsOffsetFromOS(time / 1000);
   CHECK_EQ(actual, expected);
 }
 
@@ -166,32 +166,3 @@ TEST(DaylightSavingsTime) {
   CheckDST(august_20 + 2 * 3600 - 1000);
   CheckDST(august_20);
 }
-
-namespace {
-int legacy_parse_count = 0;
-void DateParseLegacyCounterCallback(v8::Isolate* isolate,
-                                    v8::Isolate::UseCounterFeature feature) {
-  if (feature == v8::Isolate::kLegacyDateParser) legacy_parse_count++;
-}
-}  // anonymous namespace
-
-TEST(DateParseLegacyUseCounter) {
-  CcTest::InitializeVM();
-  v8::HandleScope scope(CcTest::isolate());
-  LocalContext context;
-  CcTest::isolate()->SetUseCounterCallback(DateParseLegacyCounterCallback);
-  CHECK_EQ(0, legacy_parse_count);
-  CompileRun("Date.parse('2015-02-31')");
-  CHECK_EQ(0, legacy_parse_count);
-  CompileRun("Date.parse('2015-02-31T11:22:33.444Z01:23')");
-  CHECK_EQ(0, legacy_parse_count);
-  CompileRun("Date.parse('2015-02-31T11:22:33.444')");
-  CHECK_EQ(0, legacy_parse_count);
-  CompileRun("Date.parse('2000 01 01')");
-  CHECK_EQ(1, legacy_parse_count);
-  CompileRun("Date.parse('2015-02-31T11:22:33.444     ')");
-  CHECK_EQ(1, legacy_parse_count);
-}
-
-}  // namespace internal
-}  // namespace v8

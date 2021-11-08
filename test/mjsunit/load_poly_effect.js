@@ -39,7 +39,6 @@ var deopt = false;
 var o2 = {x_tagged:{}};
 o2.x_tagged = 1;
 
-%PrepareFunctionForOptimization(load);
 load({x:1}, o2);
 load({x:1}, o2);
 print(load(o, o2));

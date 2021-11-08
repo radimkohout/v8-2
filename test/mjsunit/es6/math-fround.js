@@ -19,7 +19,6 @@ assertTrue(isNaN(Math.fround({ valueOf: function() { return "abc"; } })));
 function unopt(x) { return Math.fround(x); }
 function opt(y) { return Math.fround(y); }
 
-%PrepareFunctionForOptimization(opt);
 opt(0.1);
 opt(0.1);
 unopt(0.1);

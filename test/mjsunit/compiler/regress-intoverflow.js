@@ -36,7 +36,6 @@ function testMul(a, b) {
   }
 }
 
-%PrepareFunctionForOptimization(testMul);
 for (var i=0; i<5; i++) testMul(0,0);
 %OptimizeFunctionOnNextCall(testMul);
 assertEquals(4611686018427388000, testMul(-0x40000000, -0x40000000));
@@ -49,7 +48,6 @@ function testAdd(a, b) {
   }
 }
 
-%PrepareFunctionForOptimization(testAdd);
 for (var i=0; i<5; i++) testAdd(0,0);
 %OptimizeFunctionOnNextCall(testAdd);
 assertEquals(-4294967296, testAdd(-0x40000000, -0x40000000));
@@ -64,7 +62,6 @@ function testSub(a, b) {
   }
 }
 
-%PrepareFunctionForOptimization(testSub);
 for (var i=0; i<5; i++) testSub(0,0);
 %OptimizeFunctionOnNextCall(testSub);
 assertEquals(-2147483650, testSub(-0x40000000, 1));

@@ -131,13 +131,13 @@ TEST_F(DiamondTest, DiamondPhis) {
 
 TEST_F(DiamondTest, BranchHint) {
   Diamond dn(graph(), common(), Parameter(0));
-  CHECK_EQ(BranchHint::kNone, BranchHintOf(dn.branch->op()));
+  CHECK(BranchHint::kNone == BranchHintOf(dn.branch->op()));
 
   Diamond dt(graph(), common(), Parameter(0), BranchHint::kTrue);
-  CHECK_EQ(BranchHint::kTrue, BranchHintOf(dt.branch->op()));
+  CHECK(BranchHint::kTrue == BranchHintOf(dt.branch->op()));
 
   Diamond df(graph(), common(), Parameter(0), BranchHint::kFalse);
-  CHECK_EQ(BranchHint::kFalse, BranchHintOf(df.branch->op()));
+  CHECK(BranchHint::kFalse == BranchHintOf(df.branch->op()));
 }
 
 

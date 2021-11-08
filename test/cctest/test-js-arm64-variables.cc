@@ -29,23 +29,38 @@
 
 #include <limits.h>
 
-#include "src/init/v8.h"
+#include "src/v8.h"
 
-#include "src/api/api.h"
+#include "src/api.h"
 #include "src/base/platform/platform.h"
-#include "src/codegen/compilation-cache.h"
-#include "src/execution/execution.h"
-#include "src/execution/isolate.h"
-#include "src/objects/objects-inl.h"
-#include "src/strings/unicode-inl.h"
-#include "src/utils/utils.h"
+#include "src/compilation-cache.h"
+#include "src/execution.h"
+#include "src/isolate.h"
+#include "src/parsing/parser.h"
+#include "src/unicode-inl.h"
+#include "src/utils.h"
 #include "test/cctest/cctest.h"
 
-namespace v8 {
-namespace internal {
-namespace test_js_arm64_variables {
+using ::v8::Context;
+using ::v8::Extension;
+using ::v8::Function;
+using ::v8::FunctionTemplate;
+using ::v8::HandleScope;
+using ::v8::Local;
+using ::v8::Message;
+using ::v8::MessageCallback;
+using ::v8::Object;
+using ::v8::ObjectTemplate;
+using ::v8::Persistent;
+using ::v8::Script;
+using ::v8::StackTrace;
+using ::v8::String;
+using ::v8::TryCatch;
+using ::v8::Undefined;
+using ::v8::V8;
+using ::v8::Value;
 
-static void ExpectInt32(Local<v8::Context> context, int32_t expected,
+static void ExpectInt32(Local<Context> context, int32_t expected,
                         Local<Value> result) {
   CHECK(result->IsInt32());
   CHECK_EQ(expected, result->Int32Value(context).FromJust());
@@ -125,7 +140,3 @@ TEST(lookup_slots) {
 "f5(5);");
   ExpectInt32(env.local(), 5, result);
 }
-
-}  // namespace test_js_arm64_variables
-}  // namespace internal
-}  // namespace v8

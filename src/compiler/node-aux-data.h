@@ -6,7 +6,7 @@
 #define V8_COMPILER_NODE_AUX_DATA_H_
 
 #include "src/compiler/node.h"
-#include "src/zone/zone-containers.h"
+#include "src/zone-containers.h"
 
 namespace v8 {
 namespace internal {
@@ -16,36 +16,19 @@ namespace compiler {
 class Node;
 
 template <class T>
-T DefaultConstruct(Zone* zone) {
-  return T();
-}
-
-template <class T>
-T ZoneConstruct(Zone* zone) {
-  return T(zone);
-}
-
-template <class T, T def(Zone*) = DefaultConstruct<T>>
 class NodeAuxData {
  public:
-  explicit NodeAuxData(Zone* zone) : zone_(zone), aux_data_(zone) {}
-  explicit NodeAuxData(size_t initial_size, Zone* zone)
-      : zone_(zone), aux_data_(initial_size, def(zone), zone) {}
+  explicit NodeAuxData(Zone* zone) : aux_data_(zone) {}
 
-  // Update entry. Returns true iff entry was changed.
-  bool Set(Node* node, T const& data) {
+  void Set(Node* node, T const& data) {
     size_t const id = node->id();
-    if (id >= aux_data_.size()) aux_data_.resize(id + 1, def(zone_));
-    if (aux_data_[id] != data) {
-      aux_data_[id] = data;
-      return true;
-    }
-    return false;
+    if (id >= aux_data_.size()) aux_data_.resize(id + 1);
+    aux_data_[id] = data;
   }
 
   T Get(Node* node) const {
     size_t const id = node->id();
-    return (id < aux_data_.size()) ? aux_data_[id] : def(zone_);
+    return (id < aux_data_.size()) ? aux_data_[id] : T();
   }
 
   class const_iterator;
@@ -55,18 +38,18 @@ class NodeAuxData {
   const_iterator end() const;
 
  private:
-  Zone* zone_;
   ZoneVector<T> aux_data_;
 };
 
-template <class T, T def(Zone*)>
-class NodeAuxData<T, def>::const_iterator {
+
+template <class T>
+class NodeAuxData<T>::const_iterator {
  public:
-  using iterator_category = std::forward_iterator_tag;
-  using difference_type = int;
-  using value_type = std::pair<size_t, T>;
-  using pointer = value_type*;
-  using reference = value_type&;
+  typedef std::forward_iterator_tag iterator_category;
+  typedef int difference_type;
+  typedef std::pair<size_t, T> value_type;
+  typedef value_type* pointer;
+  typedef value_type& reference;
 
   const_iterator(const ZoneVector<T>* data, size_t current)
       : data_(data), current_(current) {}
@@ -93,16 +76,14 @@ class NodeAuxData<T, def>::const_iterator {
   size_t current_;
 };
 
-template <class T, T def(Zone*)>
-typename NodeAuxData<T, def>::const_iterator NodeAuxData<T, def>::begin()
-    const {
-  return typename NodeAuxData<T, def>::const_iterator(&aux_data_, 0);
+template <class T>
+typename NodeAuxData<T>::const_iterator NodeAuxData<T>::begin() const {
+  return typename NodeAuxData<T>::const_iterator(&aux_data_, 0);
 }
 
-template <class T, T def(Zone*)>
-typename NodeAuxData<T, def>::const_iterator NodeAuxData<T, def>::end() const {
-  return typename NodeAuxData<T, def>::const_iterator(&aux_data_,
-                                                      aux_data_.size());
+template <class T>
+typename NodeAuxData<T>::const_iterator NodeAuxData<T>::end() const {
+  return typename NodeAuxData<T>::const_iterator(&aux_data_, aux_data_.size());
 }
 
 }  // namespace compiler

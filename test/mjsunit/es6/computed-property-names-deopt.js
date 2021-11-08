@@ -23,7 +23,6 @@
     return { [name]: value, __proto__: deoptMe() };
   }
 
-  %PrepareFunctionForOptimization(f);
   checkObject("a", 1, f("a", 1));
   checkObject("b", 2, f("b", 2));
   %OptimizeFunctionOnNextCall(f);

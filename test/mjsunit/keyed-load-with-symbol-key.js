@@ -25,8 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --allow-natives-syntax --opt --no-always-opt
-
+// Flags: --allow-natives-syntax
 var s = Symbol("foo");
 
 var o = {
@@ -37,7 +36,6 @@ function get(obj, key) {
   return obj[key];
 }
 
-%PrepareFunctionForOptimization(get);
 assertEquals("bar", get(o, s));
 get(o, s);
 get(o, s);

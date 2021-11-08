@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --allow-natives-syntax --use-osr
+// Flags: --allow-natives-syntax --use-osr --turbo-osr
 
 "use strict";
 
@@ -24,11 +24,9 @@ function foo() {
   result.push(out);
   return result;
 }
-%PrepareFunctionForOptimization(foo);
 
 
 function check() {
-  %PrepareFunctionForOptimization(foo);
   var r = foo();
   assertEquals(45, r.pop());
   for (var i = 9; i >= 0; i--) {
@@ -36,7 +34,6 @@ function check() {
   }
   assertEquals(0, r.length);
 }
-%PrepareFunctionForOptimization(check);
 
 check();
 check();

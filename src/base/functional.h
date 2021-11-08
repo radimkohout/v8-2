@@ -13,7 +13,6 @@
 #include <functional>
 #include <utility>
 
-#include "src/base/base-export.h"
 #include "src/base/macros.h"
 
 namespace v8 {
@@ -25,7 +24,7 @@ namespace base {
 // the Draft Technical Report on C++ Library Extensions (TR1)).
 //
 // base::hash is implemented by calling the hash_value function. The namespace
-// isn't specified so that it can detect overloads via argument dependent
+// isn't specified so that it can detect overloads via argument dependant
 // lookup. So if there is a free function hash_value in the same namespace as a
 // custom type, it will get called.
 //
@@ -68,7 +67,7 @@ struct hash;
 
 V8_INLINE size_t hash_combine() { return 0u; }
 V8_INLINE size_t hash_combine(size_t seed) { return seed; }
-V8_BASE_EXPORT size_t hash_combine(size_t seed, size_t value);
+size_t hash_combine(size_t seed, size_t value);
 template <typename T, typename... Ts>
 V8_INLINE size_t hash_combine(T const& v, Ts const&... vs) {
   return hash_combine(hash_combine(vs...), hash<T>()(v));
@@ -92,9 +91,9 @@ V8_BASE_HASH_VALUE_TRIVIAL(unsigned char)
 V8_BASE_HASH_VALUE_TRIVIAL(unsigned short)  // NOLINT(runtime/int)
 #undef V8_BASE_HASH_VALUE_TRIVIAL
 
-V8_BASE_EXPORT size_t hash_value(unsigned int);
-V8_BASE_EXPORT size_t hash_value(unsigned long);       // NOLINT(runtime/int)
-V8_BASE_EXPORT size_t hash_value(unsigned long long);  // NOLINT(runtime/int)
+size_t hash_value(unsigned int);
+size_t hash_value(unsigned long);       // NOLINT(runtime/int)
+size_t hash_value(unsigned long long);  // NOLINT(runtime/int)
 
 #define V8_BASE_HASH_VALUE_SIGNED(type)            \
   V8_INLINE size_t hash_value(signed type v) {     \
@@ -137,17 +136,18 @@ V8_INLINE size_t hash_value(std::pair<T1, T2> const& v) {
   return hash_combine(v.first, v.second);
 }
 
+
 template <typename T>
-struct hash {
+struct hash : public std::unary_function<T, size_t> {
   V8_INLINE size_t operator()(T const& v) const { return hash_value(v); }
 };
 
-#define V8_BASE_HASH_SPECIALIZE(type)                 \
-  template <>                                         \
-  struct hash<type> {                                 \
-    V8_INLINE size_t operator()(type const v) const { \
-      return ::v8::base::hash_value(v);               \
-    }                                                 \
+#define V8_BASE_HASH_SPECIALIZE(type)                            \
+  template <>                                                    \
+  struct hash<type> : public std::unary_function<type, size_t> { \
+    V8_INLINE size_t operator()(type const v) const {            \
+      return ::v8::base::hash_value(v);                          \
+    }                                                            \
   };
 V8_BASE_HASH_SPECIALIZE(bool)
 V8_BASE_HASH_SPECIALIZE(signed char)
@@ -165,11 +165,12 @@ V8_BASE_HASH_SPECIALIZE(double)
 #undef V8_BASE_HASH_SPECIALIZE
 
 template <typename T>
-struct hash<T*> {
+struct hash<T*> : public std::unary_function<T*, size_t> {
   V8_INLINE size_t operator()(T* const v) const {
     return ::v8::base::hash_value(v);
   }
 };
+
 
 // base::bit_equal_to is a function object class for bitwise equality
 // comparison, similar to std::equal_to, except that the comparison is performed
@@ -180,10 +181,10 @@ struct hash<T*> {
 // hash data structure based on the bitwise representation of types.
 
 template <typename T>
-struct bit_equal_to {};
+struct bit_equal_to : public std::binary_function<T, T, bool> {};
 
 template <typename T>
-struct bit_hash {};
+struct bit_hash : public std::unary_function<T, size_t> {};
 
 #define V8_BASE_BIT_SPECIALIZE_TRIVIAL(type)                 \
   template <>                                                \
@@ -202,19 +203,19 @@ V8_BASE_BIT_SPECIALIZE_TRIVIAL(long long)           // NOLINT(runtime/int)
 V8_BASE_BIT_SPECIALIZE_TRIVIAL(unsigned long long)  // NOLINT(runtime/int)
 #undef V8_BASE_BIT_SPECIALIZE_TRIVIAL
 
-#define V8_BASE_BIT_SPECIALIZE_BIT_CAST(type, btype)       \
-  template <>                                              \
-  struct bit_equal_to<type> {                              \
-    V8_INLINE bool operator()(type lhs, type rhs) const {  \
-      return bit_cast<btype>(lhs) == bit_cast<btype>(rhs); \
-    }                                                      \
-  };                                                       \
-  template <>                                              \
-  struct bit_hash<type> {                                  \
-    V8_INLINE size_t operator()(type v) const {            \
-      hash<btype> h;                                       \
-      return h(bit_cast<btype>(v));                        \
-    }                                                      \
+#define V8_BASE_BIT_SPECIALIZE_BIT_CAST(type, btype)                          \
+  template <>                                                                 \
+  struct bit_equal_to<type> : public std::binary_function<type, type, bool> { \
+    V8_INLINE bool operator()(type lhs, type rhs) const {                     \
+      return bit_cast<btype>(lhs) == bit_cast<btype>(rhs);                    \
+    }                                                                         \
+  };                                                                          \
+  template <>                                                                 \
+  struct bit_hash<type> : public std::unary_function<type, size_t> {          \
+    V8_INLINE size_t operator()(type v) const {                               \
+      hash<btype> h;                                                          \
+      return h(bit_cast<btype>(v));                                           \
+    }                                                                         \
   };
 V8_BASE_BIT_SPECIALIZE_BIT_CAST(float, uint32_t)
 V8_BASE_BIT_SPECIALIZE_BIT_CAST(double, uint64_t)

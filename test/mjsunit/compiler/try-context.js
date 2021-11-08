@@ -17,7 +17,6 @@
     }
     return x;
   }
-  %PrepareFunctionForOptimization(f);
   assertEquals(23, f(0));
   assertEquals(24, f(1));
   %OptimizeFunctionOnNextCall(f);
@@ -38,7 +37,6 @@
     }
     return x;
   }
-  %PrepareFunctionForOptimization(f);
   assertThrows(function() { f(0) });
   assertThrows(function() { f(1) });
   %OptimizeFunctionOnNextCall(f);
@@ -62,7 +60,6 @@
     }
     return x;
   }
-  %PrepareFunctionForOptimization(f);
   assertEquals(23, f(0));
   assertEquals(24, f(1));
   %OptimizeFunctionOnNextCall(f);
@@ -84,7 +81,6 @@
     }
     return x;
   }
-  %PrepareFunctionForOptimization(f);
   assertEquals(23, f(0));
   assertEquals(24, f(1));
   %OptimizeFunctionOnNextCall(f);

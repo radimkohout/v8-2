@@ -19,7 +19,7 @@
 " Add the following to your .vimrc file:
 "     so /path/to/src/tools/vim/ninja-build.vim
 
-pythonx << endpython
+python << endpython
 import os
 import vim
 
@@ -47,14 +47,17 @@ def path_to_build_dir(configuration):
   """Returns <v8_root>/<output_dir>/(Release|Debug)."""
 
   v8_root = path_to_source_root()
-  sys.path.append(os.path.join(v8_root, 'tools', 'vim'))
+  sys.path.append(os.path.join(v8_root, 'tools', 'ninja'))
   from ninja_output import GetNinjaOutputDirectory
   return GetNinjaOutputDirectory(v8_root, configuration)
 
 
 def compute_ninja_command_for_targets(targets='', configuration=None):
+  flags = []
+  if "use_goma=1" in os.getenv('GYP_DEFINES', '').split(' '):
+    flags = ['-j', '512']
   build_dir = path_to_build_dir(configuration);
-  build_cmd = ' '.join(['autoninja', '-C', build_dir, targets])
+  build_cmd = ' '.join(['ninja'] + flags + ['-C', build_dir, targets])
   vim.command('return "%s"' % build_cmd)
 
 
@@ -75,11 +78,7 @@ endpython
 fun! s:MakeWithCustomCommand(build_cmd)
   let l:oldmakepgr = &makeprg
   let &makeprg=a:build_cmd
-  if exists(':Make') == 2
-    Make
-  else
-    silent make | cwindow
-  endif
+  silent make | cwindow
   if !has('gui_running')
     redraw!
   endif
@@ -87,11 +86,11 @@ fun! s:MakeWithCustomCommand(build_cmd)
 endfun
 
 fun! s:NinjaCommandForCurrentBuffer()
-  pythonx compute_ninja_command_for_current_buffer()
+  python compute_ninja_command_for_current_buffer()
 endfun
 
 fun! s:NinjaCommandForTargets(targets)
-  pythonx compute_ninja_command_for_targets(vim.eval('a:targets'))
+  python compute_ninja_command_for_targets(vim.eval('a:targets'))
 endfun
 
 fun! CrCompileFile()

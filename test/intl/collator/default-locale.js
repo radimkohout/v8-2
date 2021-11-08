@@ -37,6 +37,9 @@ assertFalse(options.locale === 'und');
 assertFalse(options.locale === '');
 assertFalse(options.locale === undefined);
 
+// Then check for equality.
+assertEquals(options.locale, %GetDefaultICULocale());
+
 var collatorNone = new Intl.Collator();
 assertEquals(options.locale, collatorNone.resolvedOptions().locale);
 
@@ -45,5 +48,5 @@ var collatorBraket = new Intl.Collator({});
 assertEquals(options.locale, collatorBraket.resolvedOptions().locale);
 
 var collatorWithOptions = new Intl.Collator(undefined, {usage: 'search'});
-var locale = collatorWithOptions.resolvedOptions().locale;
-assertEquals(locale.indexOf('-co-search'), -1);
+assertEquals(%GetDefaultICULocale() + '-u-co-search',
+             collatorWithOptions.resolvedOptions().locale);

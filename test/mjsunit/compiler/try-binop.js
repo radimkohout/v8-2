@@ -14,7 +14,6 @@ function mult_left_plain(x) {
   }
 }
 
-%PrepareFunctionForOptimization(mult_left_plain);
 %OptimizeFunctionOnNextCall(mult_left_plain);
 assertEquals("boom", mult_left_plain(boom));
 assertEquals(46, mult_left_plain(23));
@@ -27,7 +26,6 @@ function mult_right_plain(x) {
   }
 }
 
-%PrepareFunctionForOptimization(mult_right_plain);
 %OptimizeFunctionOnNextCall(mult_right_plain);
 assertEquals("boom", mult_right_plain(boom));
 assertEquals(69, mult_right_plain(23));
@@ -40,7 +38,6 @@ function mult_none_plain(x,y) {
   }
 }
 
-%PrepareFunctionForOptimization(mult_none_plain);
 %OptimizeFunctionOnNextCall(mult_none_plain);
 assertEquals("boom", mult_none_plain(boom, boom));
 assertEquals("boom", mult_none_plain(boom, 2));

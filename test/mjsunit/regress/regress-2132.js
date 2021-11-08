@@ -25,13 +25,12 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --allow-natives-syntax --opt --no-always-opt --no-assert-types
+// Flags: --allow-natives-syntax
 
 function mul(x, y) {
   return (x * y) | 0;
 }
 
-%PrepareFunctionForOptimization(mul);
 mul(0, 0);
 mul(0, 0);
 %OptimizeFunctionOnNextCall(mul);
@@ -42,7 +41,6 @@ function div(x, y) {
   return (x / y) | 0;
 }
 
-%PrepareFunctionForOptimization(div);
 div(4, 2);
 div(4, 2);
 %OptimizeFunctionOnNextCall(div);

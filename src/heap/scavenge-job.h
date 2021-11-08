@@ -5,7 +5,8 @@
 #ifndef V8_HEAP_SCAVENGE_JOB_H_
 #define V8_HEAP_SCAVENGE_JOB_H_
 
-#include "src/tasks/cancelable-task.h"
+#include "src/cancelable-task.h"
+#include "src/heap/gc-tracer.h"
 
 namespace v8 {
 namespace internal {
@@ -13,24 +14,65 @@ namespace internal {
 class Heap;
 class Isolate;
 
-// The scavenge job uses platform tasks to perform a young generation
-// Scavenge garbage collection. The job posts a foreground task.
+
+// This class posts idle tasks and performs scavenges in the idle tasks.
 class ScavengeJob {
  public:
-  ScavengeJob() V8_NOEXCEPT = default;
+  class IdleTask : public CancelableIdleTask {
+   public:
+    explicit IdleTask(Isolate* isolate, ScavengeJob* job)
+        : CancelableIdleTask(isolate), job_(job) {}
+    // CancelableIdleTask overrides.
+    void RunInternal(double deadline_in_seconds) override;
 
-  void ScheduleTaskIfNeeded(Heap* heap);
+   private:
+    ScavengeJob* job_;
+  };
 
-  static size_t YoungGenerationTaskTriggerSize(Heap* heap);
+  ScavengeJob()
+      : idle_task_pending_(false),
+        idle_task_rescheduled_(false),
+        bytes_allocated_since_the_last_task_(0) {}
+
+  // Posts an idle task if the cumulative bytes allocated since the last
+  // idle task exceed kBytesAllocatedBeforeNextIdleTask.
+  void ScheduleIdleTaskIfNeeded(Heap* heap, int bytes_allocated);
+
+  // Posts an idle task ignoring the bytes allocated, but makes sure
+  // that the new idle task cannot reschedule again.
+  // This prevents infinite rescheduling.
+  void RescheduleIdleTask(Heap* heap);
+
+  bool IdleTaskPending() { return idle_task_pending_; }
+  void NotifyIdleTask() { idle_task_pending_ = false; }
+  bool IdleTaskRescheduled() { return idle_task_rescheduled_; }
+
+  static bool ReachedIdleAllocationLimit(size_t scavenge_speed_in_bytes_per_ms,
+                                         size_t new_space_size,
+                                         size_t new_space_capacity);
+
+  static bool EnoughIdleTimeForScavenge(double idle_time_ms,
+                                        size_t scavenge_speed_in_bytes_per_ms,
+                                        size_t new_space_size);
+
+  // If we haven't recorded any scavenger events yet, we use a conservative
+  // lower bound for the scavenger speed.
+  static const int kInitialScavengeSpeedInBytesPerMs = 256 * KB;
+  // Estimate of the average idle time that an idle task gets.
+  static const int kAverageIdleTimeMs = 5;
+  // The number of bytes to be allocated in new space before the next idle
+  // task is posted.
+  static const size_t kBytesAllocatedBeforeNextIdleTask = 512 * KB;
+  // The minimum size of allocated new space objects to trigger a scavenge.
+  static const size_t kMinAllocationLimit = 512 * KB;
+  // The allocation limit cannot exceed this fraction of the new space capacity.
+  static const double kMaxAllocationLimitAsFractionOfNewSpace;
 
  private:
-  class Task;
-
-  static bool YoungGenerationSizeTaskTriggerReached(Heap* heap);
-
-  void set_task_pending(bool value) { task_pending_ = value; }
-
-  bool task_pending_ = false;
+  void ScheduleIdleTask(Heap* heap);
+  bool idle_task_pending_;
+  bool idle_task_rescheduled_;
+  int bytes_allocated_since_the_last_task_;
 };
 }  // namespace internal
 }  // namespace v8

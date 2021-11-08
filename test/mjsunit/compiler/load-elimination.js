@@ -141,7 +141,6 @@ function test_store_store() {
 }
 
 function test(x, f) {
-  %PrepareFunctionForOptimization(f);
   assertEquals(x, f());
   assertEquals(x, f());
   %OptimizeFunctionOnNextCall(f);

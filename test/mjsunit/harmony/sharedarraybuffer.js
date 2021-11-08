@@ -25,7 +25,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --harmony-sharedarraybuffer --allow-natives-syntax
+// Flags: --harmony-sharedarraybuffer --harmony-tostring
+
 
 // SharedArrayBuffer
 
@@ -46,10 +47,11 @@ function TestArrayBufferCreation() {
   assertThrows(function() { new SharedArrayBuffer(-10); }, RangeError);
   assertThrows(function() { new SharedArrayBuffer(-2.567); }, RangeError);
 
+/* TODO[dslomov]: Reenable the test
   assertThrows(function() {
-    let kArrayBufferByteLengthLimit = %ArrayBufferMaxByteLength() + 1;
-    var ab1 = new SharedArrayBuffer(kArrayBufferByteLengthLimit);
+    var ab1 = new SharedArrayBuffer(0xFFFFFFFFFFFF)
   }, RangeError);
+*/
 
   var sab = new SharedArrayBuffer();
   assertSame(0, sab.byteLength);
@@ -67,6 +69,13 @@ function TestByteLengthNotWritable() {
 }
 
 TestByteLengthNotWritable();
+
+function TestArrayBufferNoSlice() {
+  var sab = new SharedArrayBuffer(10);
+  assertEquals(undefined, sab.slice);
+}
+
+TestArrayBufferNoSlice();
 
 // Typed arrays using SharedArrayBuffers
 
@@ -87,6 +96,9 @@ function TestTypedArray(constr, elementSize, typicalElement) {
   assertEquals("[object " + constr.name + "]",
       Object.prototype.toString.call(a0));
 
+  // TODO(binji): Should this return false here? It is a view, but it doesn't
+  // view a SharedArrayBuffer...
+  assertTrue(SharedArrayBuffer.isView(a0));
   assertSame(elementSize, a0.BYTES_PER_ELEMENT);
   assertSame(30, a0.length);
   assertSame(30*elementSize, a0.byteLength);
@@ -416,10 +428,8 @@ function TestTypedArraySet() {
   assertThrows(function() { a.set.call({}) }, TypeError);
   assertThrows(function() { a.set.call([]) }, TypeError);
 
-  a.set(0);
-  assertArrayPrefix(expected, a);
-  a.set(0, 1);
-  assertArrayPrefix(expected, a);
+  assertThrows(function() { a.set(0); }, TypeError);
+  assertThrows(function() { a.set(0, 1); }, TypeError);
 }
 
 TestTypedArraySet();
@@ -450,10 +460,10 @@ function TestTypedArraysWithIllegalIndices() {
   assertEquals(255, a[s2]);
   assertEquals(0, a[-0]);
 
-
-  a[-Infinity] = 50;
-  assertEquals(undefined, a[-Infinity]);
-
+  /* Chromium bug: 424619
+   * a[-Infinity] = 50;
+   * assertEquals(undefined, a[-Infinity]);
+   */
   a[1.5] = 10;
   assertEquals(undefined, a[1.5]);
   var nan = Math.sqrt(-1);
@@ -499,9 +509,10 @@ function TestTypedArraysWithIllegalIndicesStrict() {
   assertEquals(255, a[s2]);
   assertEquals(0, a[-0]);
 
-  a[-Infinity] = 50;
-  assertEquals(undefined, a[-Infinity]);
-
+  /* Chromium bug: 424619
+   * a[-Infinity] = 50;
+   * assertEquals(undefined, a[-Infinity]);
+   */
   a[1.5] = 10;
   assertEquals(undefined, a[1.5]);
   var nan = Math.sqrt(-1);
@@ -561,31 +572,3 @@ for(i = 0; i < typedArrayConstructors.length; i++) {
   assertThrows(function(i) { typedArrayConstructors[i](); }.bind(this, i),
                TypeError);
 }
-
-// byteLength from prototype can be overwritten
-var s = new SharedArrayBuffer(10);
-assertEquals(10, s.byteLength);
-Object.defineProperty(s, 'byteLength', {value: 42});
-assertEquals(42, s.byteLength);
-
-// byteLength on incompatible type (shared vs. regular ArrayBuffer)
-var desc = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength');
-s = new SharedArrayBuffer(10);
-Object.defineProperty(s, 'byteLength', desc);
-assertThrows(function() {s.byteLength}, TypeError);
-
-desc = Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype,
-  'byteLength');
-var a = new ArrayBuffer(10);
-Object.defineProperty(a, 'byteLength', desc);
-assertThrows(function() {a.byteLength}, TypeError);
-
-// test SharedArrayBuffer species getter
-assertSame(SharedArrayBuffer[Symbol.species], SharedArrayBuffer);
-var desc = Object.getOwnPropertyDescriptor(SharedArrayBuffer, Symbol.species);
-assertEquals("function", typeof desc.get);
-assertEquals("get [Symbol.species]", desc.get.name);
-assertEquals(0, desc.get.length);
-assertEquals("undefined", typeof desc.set);
-assertTrue(desc.configurable);
-assertFalse(desc.enumerable);

@@ -27,7 +27,7 @@
 
 // Utility functions used by parser-shell.
 
-#include "src/common/globals.h"
+#include "src/globals.h"
 
 #include <stdio.h>
 

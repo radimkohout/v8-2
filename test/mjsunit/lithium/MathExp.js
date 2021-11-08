@@ -31,7 +31,6 @@ function foo(x) {
   return Math.exp(x);
 }
 
-%PrepareFunctionForOptimization(foo);
 foo(12.3);
 var r1 = foo(12.3);
 %OptimizeFunctionOnNextCall(foo);

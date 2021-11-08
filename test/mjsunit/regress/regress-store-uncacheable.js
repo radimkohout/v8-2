@@ -25,14 +25,13 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --allow-natives-syntax --opt
+// Flags: --allow-natives-syntax
 
 function f() {
   var o = {};
   o["<abc>"] = 123;
 }
 
-%PrepareFunctionForOptimization(f);
 f();
 f();
 f();

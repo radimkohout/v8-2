@@ -2,14 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-"use strict";
 
-d8.file.execute('../base.js');
-d8.file.execute('common.js');
-d8.file.execute('map.js');
-d8.file.execute('set.js');
-d8.file.execute('weakmap.js');
-d8.file.execute('weakset.js');
+load('../base.js');
+load('common.js');
+load('map.js');
+load('set.js');
+load('weakmap.js');
+load('weakset.js');
 
 
 var success = true;

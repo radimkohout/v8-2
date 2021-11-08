@@ -13,7 +13,6 @@ function fun3() {
   return r[113];
 }
 
-%PrepareFunctionForOptimization(fun3);
 fun3();
 fun3();
 %OptimizeFunctionOnNextCall(fun3);

@@ -15,7 +15,6 @@ function add(a, b) {
   return a.x + b.x;
 }
 
-%PrepareFunctionForOptimization(add);
 assertEquals(3, add(f, g));
 assertEquals(3, add(g, f));
 %OptimizeFunctionOnNextCall(add);

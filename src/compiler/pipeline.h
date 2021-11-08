@@ -5,109 +5,80 @@
 #ifndef V8_COMPILER_PIPELINE_H_
 #define V8_COMPILER_PIPELINE_H_
 
-#include <memory>
-
 // Clients of this interface shouldn't depend on lots of compiler internals.
 // Do not include anything from src/compiler here!
-#include "src/common/globals.h"
-#include "src/objects/code.h"
-#include "src/objects/objects.h"
+#include "src/objects.h"
 
 namespace v8 {
 namespace internal {
 
-struct AssemblerOptions;
-class OptimizedCompilationInfo;
-class OptimizedCompilationJob;
-class ProfileDataFromFile;
+class CompilationInfo;
 class RegisterConfiguration;
-
-namespace wasm {
-struct CompilationEnv;
-struct FunctionBody;
-class NativeModule;
-struct WasmCompilationResult;
-class WasmEngine;
-struct WasmModule;
-class WireBytesStorage;
-}  // namespace wasm
 
 namespace compiler {
 
 class CallDescriptor;
 class Graph;
 class InstructionSequence;
-class JSGraph;
-class JSHeapBroker;
-class MachineGraph;
-class NodeOriginTable;
+class Linkage;
+class PipelineData;
 class Schedule;
-class SourcePositionTable;
-struct WasmLoopInfo;
 
-class Pipeline : public AllStatic {
+class Pipeline {
  public:
-  // Returns a new compilation job for the given JavaScript function.
-  static V8_EXPORT_PRIVATE std::unique_ptr<OptimizedCompilationJob>
-  NewCompilationJob(Isolate* isolate, Handle<JSFunction> function,
-                    CodeKind code_kind, bool has_script,
-                    BytecodeOffset osr_offset = BytecodeOffset::None(),
-                    JavaScriptFrame* osr_frame = nullptr);
+  explicit Pipeline(CompilationInfo* info) : info_(info) {}
 
-  // Run the pipeline for the WebAssembly compilation info.
-  static void GenerateCodeForWasmFunction(
-      OptimizedCompilationInfo* info, wasm::CompilationEnv* env,
-      const wasm::WireBytesStorage* wire_bytes_storage, MachineGraph* mcgraph,
-      CallDescriptor* call_descriptor, SourcePositionTable* source_positions,
-      NodeOriginTable* node_origins, wasm::FunctionBody function_body,
-      const wasm::WasmModule* module, int function_index,
-      std::vector<compiler::WasmLoopInfo>* loop_infos);
+  // Run the entire pipeline and generate a handle to a code object.
+  Handle<Code> GenerateCode();
 
-  // Run the pipeline on a machine graph and generate code.
-  static wasm::WasmCompilationResult GenerateCodeForWasmNativeStub(
-      CallDescriptor* call_descriptor, MachineGraph* mcgraph, CodeKind kind,
-      const char* debug_name, const AssemblerOptions& assembler_options,
-      SourcePositionTable* source_positions = nullptr);
-
-  // Returns a new compilation job for a wasm heap stub.
-  static std::unique_ptr<OptimizedCompilationJob> NewWasmHeapStubCompilationJob(
-      Isolate* isolate, CallDescriptor* call_descriptor,
-      std::unique_ptr<Zone> zone, Graph* graph, CodeKind kind,
-      std::unique_ptr<char[]> debug_name, const AssemblerOptions& options,
-      SourcePositionTable* source_positions = nullptr);
-
-  // Run the pipeline on a machine graph and generate code.
-  static MaybeHandle<Code> GenerateCodeForCodeStub(
-      Isolate* isolate, CallDescriptor* call_descriptor, Graph* graph,
-      JSGraph* jsgraph, SourcePositionTable* source_positions, CodeKind kind,
-      const char* debug_name, Builtin builtin, const AssemblerOptions& options,
-      const ProfileDataFromFile* profile_data);
-
-  // ---------------------------------------------------------------------------
-  // The following methods are for testing purposes only. Avoid production use.
-  // ---------------------------------------------------------------------------
-
-  // Run the pipeline on JavaScript bytecode and generate code.  If requested,
-  // hands out the heap broker on success, transferring its ownership to the
-  // caller.
-  V8_EXPORT_PRIVATE static MaybeHandle<Code> GenerateCodeForTesting(
-      OptimizedCompilationInfo* info, Isolate* isolate,
-      std::unique_ptr<JSHeapBroker>* out_broker = nullptr);
+  // Run the pipeline on a machine graph and generate code. The {schedule} must
+  // be valid, hence the given {graph} does not need to be schedulable.
+  static Handle<Code> GenerateCodeForCodeStub(Isolate* isolate,
+                                              CallDescriptor* call_descriptor,
+                                              Graph* graph, Schedule* schedule,
+                                              Code::Flags flags,
+                                              const char* debug_name);
 
   // Run the pipeline on a machine graph and generate code. If {schedule} is
   // {nullptr}, then compute a new schedule for code generation.
-  V8_EXPORT_PRIVATE static MaybeHandle<Code> GenerateCodeForTesting(
-      OptimizedCompilationInfo* info, Isolate* isolate,
-      CallDescriptor* call_descriptor, Graph* graph,
-      const AssemblerOptions& options, Schedule* schedule = nullptr);
+  static Handle<Code> GenerateCodeForTesting(CompilationInfo* info,
+                                             Graph* graph,
+                                             Schedule* schedule = nullptr);
 
   // Run just the register allocator phases.
-  V8_EXPORT_PRIVATE static bool AllocateRegistersForTesting(
-      const RegisterConfiguration* config, InstructionSequence* sequence,
-      bool use_fast_register_allocator, bool run_verifier);
+  static bool AllocateRegistersForTesting(const RegisterConfiguration* config,
+                                          InstructionSequence* sequence,
+                                          bool run_verifier);
+
+  // Run the pipeline on a machine graph and generate code. If {schedule} is
+  // {nullptr}, then compute a new schedule for code generation.
+  static Handle<Code> GenerateCodeForTesting(CompilationInfo* info,
+                                             CallDescriptor* call_descriptor,
+                                             Graph* graph,
+                                             Schedule* schedule = nullptr);
 
  private:
-  DISALLOW_IMPLICIT_CONSTRUCTORS(Pipeline);
+  // Helpers for executing pipeline phases.
+  template <typename Phase>
+  void Run();
+  template <typename Phase, typename Arg0>
+  void Run(Arg0 arg_0);
+  template <typename Phase, typename Arg0, typename Arg1>
+  void Run(Arg0 arg_0, Arg1 arg_1);
+
+  void BeginPhaseKind(const char* phase_kind);
+  void RunPrintAndVerify(const char* phase, bool untyped = false);
+  Handle<Code> ScheduleAndGenerateCode(CallDescriptor* call_descriptor);
+  void AllocateRegisters(const RegisterConfiguration* config,
+                         CallDescriptor* descriptor, bool run_verifier);
+
+  CompilationInfo* info() const { return info_; }
+  Isolate* isolate() const;
+
+  CompilationInfo* const info_;
+  PipelineData* data_;
+
+  DISALLOW_COPY_AND_ASSIGN(Pipeline);
 };
 
 }  // namespace compiler

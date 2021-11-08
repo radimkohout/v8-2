@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --allow-natives-syntax
+// Flags: --allow-natives-syntax --fold-constants
 
 function test() {
   assertEquals("string", typeof "");
@@ -14,18 +14,21 @@ function test() {
   assertEquals("object", typeof {});
   assertEquals("object", typeof /regex/);
 
-  assertTrue(%IsSmi(1));
-  assertFalse(%IsSmi(1.1));
-  assertFalse(%IsSmi({}));
+  assertTrue(%_IsSmi(1));
+  assertFalse(%_IsSmi(1.1));
+  assertFalse(%_IsSmi({}));
 
-  assertTrue(%IsArray([1]));
-  assertFalse(%IsArray(function() {}));
+  assertTrue(%_IsRegExp(/regexp/));
+  assertFalse(%_IsRegExp({}));
 
-  assertTrue(%IsJSReceiver(new Date()));
-  assertFalse(%IsJSReceiver(1));
+  assertTrue(%_IsArray([1]));
+  assertFalse(%_IsArray(function() {}));
+
+  assertTrue(%_IsJSReceiver(new Date()));
+  assertFalse(%_IsJSReceiver(1));
 }
 
-%PrepareFunctionForOptimization(test);
+
 test();
 test();
 %OptimizeFunctionOnNextCall(test);

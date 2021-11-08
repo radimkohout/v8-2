@@ -94,9 +94,7 @@ function Thing() {
 
 function NotAString() {
   var n = new Thing();
-  n.toString = function() {
-    return 'Test';
-  };
+  n.toString = function() { return "Test"; };
   n.charCodeAt = String.prototype.charCodeAt;
   return n;
 }
@@ -104,9 +102,7 @@ function NotAString() {
 
 function NotAString16() {
   var n = new Thing();
-  n.toString = function() {
-    return 'Te\u1234t';
-  };
+  n.toString = function() { return "Te\u1234t"; };
   n.charCodeAt = String.prototype.charCodeAt;
   return n;
 }
@@ -115,7 +111,7 @@ function NotAString16() {
 function TestStringType(generator, sixteen) {
   var g = generator;
   var len = g().toString().length;
-  var t = sixteen ? 't' : 'f';
+  var t = sixteen ? "t" : "f"
   t += generator.name;
   assertTrue(isNaN(g().charCodeAt(-1e19)), 1 + t);
   assertTrue(isNaN(g().charCodeAt(-0x80000001)), 2 + t);
@@ -145,6 +141,7 @@ function TestStringType(generator, sixteen) {
   assertEquals(116, g().charCodeAt(3.14159), 26 + t);
 }
 
+
 TestStringType(Cons, false);
 TestStringType(Deep, false);
 TestStringType(Slice, false);
@@ -158,21 +155,12 @@ TestStringType(Slice16End, true);
 TestStringType(Flat16, true);
 TestStringType(NotAString16, true);
 
-function Flat16Optimized() {
-  var str = Flat16();
-  return str.charCodeAt(2);
-};
-%PrepareFunctionForOptimization(Flat16Optimized);
-assertEquals(0x1234, Flat16Optimized());
-assertEquals(0x1234, Flat16Optimized());
-%OptimizeFunctionOnNextCall(Flat16Optimized);
-assertEquals(0x1234, Flat16Optimized());
 
 function ConsNotSmiIndex() {
   var str = Cons();
   assertTrue(isNaN(str.charCodeAt(0x7fffffff)));
-};
-%PrepareFunctionForOptimization(ConsNotSmiIndex);
+}
+
 for (var i = 0; i < 5; i++) {
   ConsNotSmiIndex();
 }
@@ -187,9 +175,7 @@ for (var i = 0; i != 10; i++) {
 
 function StupidThing() {
   // Doesn't return a string from toString!
-  this.toString = function() {
-    return 42;
-  };
+  this.toString = function() { return 42; }
   this.charCodeAt = String.prototype.charCodeAt;
 }
 
@@ -209,10 +195,10 @@ medium += medium; // 128.
 medium += medium; // 256.
 
 var long = medium;
-long += long + long + long;  // 1024.
-long += long + long + long;  // 4096.
-long += long + long + long;  // 16384.
-long += long + long + long;  // 65536.
+long += long + long + long;     // 1024.
+long += long + long + long;     // 4096.
+long += long + long + long;     // 16384.
+long += long + long + long;     // 65536.
 
 assertTrue(isNaN(medium.charCodeAt(-1)), 31);
 assertEquals(49, medium.charCodeAt(0), 32);
@@ -238,10 +224,13 @@ function directlyOnPrototype() {
   assertEquals(97, "a".x(0));
   assertEquals(98, "b".x(0));
   assertEquals(99, "c".x(0));
-};
-%PrepareFunctionForOptimization(directlyOnPrototype);
+}
+
 for (var i = 0; i < 5; i++) {
   directlyOnPrototype();
 }
 %OptimizeFunctionOnNextCall(directlyOnPrototype);
 directlyOnPrototype();
+
+assertTrue(isNaN(%_StringCharCodeAt("ABC", -1)));
+assertTrue(isNaN(%_StringCharCodeAt("ABC", 4)));

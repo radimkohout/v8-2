@@ -50,8 +50,6 @@ function f(x) {
   return ret;
 };
 
-%PrepareFunctionForOptimization(f);
-
 for (var i = 0; i < 3; i++) assertEquals(i, f(i));
 
 %OptimizeFunctionOnNextCall(f);

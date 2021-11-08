@@ -2,14 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --allow-natives-syntax --opt
+// Flags: --allow-natives-syntax
 
 function bar(a) {
   var x = a[0];
   return x == undefined;
 }
 
-%PrepareFunctionForOptimization(bar);
 // Make the keyed load be polymorphic on holey smi and holey fast.
 bar([, 2, 3]);
 bar([, 'two', 'three']);

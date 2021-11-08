@@ -20,7 +20,6 @@
     }
   }
 
-  %PrepareFunctionForOptimization(f);
   assertEquals(43, f());
   assertEquals(43, f());
   %NeverOptimizeFunction(g);
@@ -51,7 +50,6 @@
     return b;
   }
 
-  %PrepareFunctionForOptimization(f);
   assertEquals(43, f());
   assertEquals(43, f());
   %NeverOptimizeFunction(g);
@@ -82,7 +80,6 @@
     return h() + 1;
   }
 
-  %PrepareFunctionForOptimization(f);
   assertEquals(44, f());
   assertEquals(44, f());
   %NeverOptimizeFunction(g);
@@ -112,7 +109,6 @@
     return a;
   }
 
-  %PrepareFunctionForOptimization(f);
   assertEquals(43, f());
   assertEquals(43, f());
   %NeverOptimizeFunction(g);
@@ -139,7 +135,6 @@
     }
     return x;
   }
-  %PrepareFunctionForOptimization(f);
   assertEquals(23, f(0));
   assertEquals(24, f(1));
   %OptimizeFunctionOnNextCall(f);
@@ -166,7 +161,6 @@
     }
     return x;
   }
-  %PrepareFunctionForOptimization(f);
   assertThrows(function() { f(0) });
   assertThrows(function() { f(1) });
   %OptimizeFunctionOnNextCall(f);
@@ -196,7 +190,6 @@
     }
     return x;
   }
-  %PrepareFunctionForOptimization(f);
   assertEquals(23, f(0));
   assertEquals(24, f(1));
   %OptimizeFunctionOnNextCall(f);
@@ -224,7 +217,6 @@
     }
     return x;
   }
-  %PrepareFunctionForOptimization(f);
   assertEquals(23, f(0));
   assertEquals(24, f(1));
   %OptimizeFunctionOnNextCall(f);

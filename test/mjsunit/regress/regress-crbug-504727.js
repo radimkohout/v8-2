@@ -5,5 +5,5 @@
 // Flags: --no-test
 
 if (this.Worker) {
-  var __v_2 = new Worker('', {type: 'string'});
+  var __v_2 = new Worker('');
 }

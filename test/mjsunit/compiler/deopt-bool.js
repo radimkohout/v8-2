@@ -15,8 +15,6 @@ function foo(a, b) {
   return passed;
 }
 
-%PrepareFunctionForOptimization(foo);
-
 assertTrue(foo(3, 4));
 assertTrue(foo(3, 4));
 assertFalse(foo(3.1, 4));

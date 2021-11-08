@@ -4,10 +4,19 @@
 
 #include "src/base/platform/platform.h"
 
-#include "testing/gtest/include/gtest/gtest.h"
+#if V8_OS_POSIX
+#include <unistd.h>  // NOLINT
+#endif
 
 #if V8_OS_WIN
-#include <windows.h>
+#include "src/base/win32-headers.h"
+#endif
+#include "testing/gtest/include/gtest/gtest.h"
+
+#if V8_OS_ANDROID
+#define DISABLE_ON_ANDROID(Name) DISABLED_##Name
+#else
+#define DISABLE_ON_ANDROID(Name) Name
 #endif
 
 namespace v8 {
@@ -34,7 +43,7 @@ class ThreadLocalStorageTest : public Thread, public ::testing::Test {
       keys_[i] = Thread::CreateThreadLocalKey();
     }
   }
-  ~ThreadLocalStorageTest() override {
+  ~ThreadLocalStorageTest() {
     for (size_t i = 0; i < arraysize(keys_); ++i) {
       Thread::DeleteThreadLocalKey(keys_[i]);
     }
@@ -83,27 +92,9 @@ class ThreadLocalStorageTest : public Thread, public ::testing::Test {
 
 TEST_F(ThreadLocalStorageTest, DoTest) {
   Run();
-  CHECK(Start());
+  Start();
   Join();
 }
-
-TEST(StackTest, GetStackStart) { EXPECT_NE(nullptr, Stack::GetStackStart()); }
-
-TEST(StackTest, GetCurrentStackPosition) {
-  EXPECT_NE(nullptr, Stack::GetCurrentStackPosition());
-}
-
-#if !V8_OS_FUCHSIA
-TEST(StackTest, StackVariableInBounds) {
-  void* dummy;
-  ASSERT_GT(static_cast<void*>(Stack::GetStackStart()),
-            Stack::GetCurrentStackPosition());
-  EXPECT_GT(static_cast<void*>(Stack::GetStackStart()),
-            Stack::GetRealStackAddressForSlot(&dummy));
-  EXPECT_LT(static_cast<void*>(Stack::GetCurrentStackPosition()),
-            Stack::GetRealStackAddressForSlot(&dummy));
-}
-#endif  // !V8_OS_FUCHSIA
 
 }  // namespace base
 }  // namespace v8

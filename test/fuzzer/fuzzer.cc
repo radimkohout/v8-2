@@ -29,20 +29,20 @@ int main(int argc, char* argv[]) {
   }
 
   fseek(input, 0, SEEK_END);
-  size_t size = ftell(input);
+  long size = ftell(input);
   fseek(input, 0, SEEK_SET);
 
   uint8_t* data = reinterpret_cast<uint8_t*>(malloc(size));
   if (!data) {
     fclose(input);
-    fprintf(stderr, "Failed to allocate %zu bytes\n", size);
+    fprintf(stderr, "Failed to allocate %ld bytes\n", size);
     return 1;
   }
 
   size_t bytes_read = fread(data, 1, size, input);
   fclose(input);
 
-  if (bytes_read != static_cast<size_t>(size)) {
+  if (bytes_read != size) {
     free(data);
     fprintf(stderr, "Failed to read %s\n", argv[1]);
     return 1;

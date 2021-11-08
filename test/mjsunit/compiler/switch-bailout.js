@@ -37,7 +37,6 @@ function f(x) {
   return 99;
 }
 
-%PrepareFunctionForOptimization(f);
 for (var i = 0; i < 5; i++) f("foo");
 %OptimizeFunctionOnNextCall(f);
 f("foo");

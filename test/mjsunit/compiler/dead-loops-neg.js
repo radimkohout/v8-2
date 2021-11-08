@@ -83,7 +83,6 @@ var params_loops = [loop6, loop7, loop8];
 
 for (var i = 0; i < no_params_loops.length; i++) {
   var f = no_params_loops[i];
-  %PrepareFunctionForOptimization(f);
   f();
   f();
   f();
@@ -93,7 +92,6 @@ for (var i = 0; i < no_params_loops.length; i++) {
 
 for (var i = 0; i < params_loops.length; i++) {
   var f = params_loops[i];
-  %PrepareFunctionForOptimization(f);
   f(3);
   f(7);
   f(11);

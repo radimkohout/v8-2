@@ -43,7 +43,6 @@ function f() {
 }
 
 var o = f();
-%PrepareFunctionForOptimization(o);
 assertEquals(1, o());
 assertEquals(2, o());
 assertEquals(3, o());

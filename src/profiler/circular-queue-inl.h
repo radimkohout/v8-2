@@ -16,16 +16,19 @@ SamplingCircularQueue<T, L>::SamplingCircularQueue()
       dequeue_pos_(buffer_) {
 }
 
-template <typename T, unsigned L>
-SamplingCircularQueue<T, L>::~SamplingCircularQueue() = default;
+
+template<typename T, unsigned L>
+SamplingCircularQueue<T, L>::~SamplingCircularQueue() {
+}
+
 
 template<typename T, unsigned L>
 T* SamplingCircularQueue<T, L>::Peek() {
-  base::SeqCst_MemoryFence();
+  base::MemoryBarrier();
   if (base::Acquire_Load(&dequeue_pos_->marker) == kFull) {
     return &dequeue_pos_->record;
   }
-  return nullptr;
+  return NULL;
 }
 
 
@@ -38,11 +41,11 @@ void SamplingCircularQueue<T, L>::Remove() {
 
 template<typename T, unsigned L>
 T* SamplingCircularQueue<T, L>::StartEnqueue() {
-  base::SeqCst_MemoryFence();
+  base::MemoryBarrier();
   if (base::Acquire_Load(&enqueue_pos_->marker) == kEmpty) {
     return &enqueue_pos_->record;
   }
-  return nullptr;
+  return NULL;
 }
 
 

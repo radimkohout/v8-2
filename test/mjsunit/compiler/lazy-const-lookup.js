@@ -32,7 +32,6 @@ function outer() {
   function inner() {
     return x;
   }
-  %PrepareFunctionForOptimization(inner);
   inner();
   %OptimizeFunctionOnNextCall(inner);
   inner();

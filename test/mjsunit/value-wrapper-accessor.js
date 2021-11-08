@@ -49,7 +49,6 @@ function test(object, prototype) {
       return s.strict;
     }
 
-    %PrepareFunctionForOptimization(nonstrict);
     nonstrict(object);
     nonstrict(object);
     %OptimizeFunctionOnNextCall(nonstrict);
@@ -57,7 +56,6 @@ function test(object, prototype) {
     nonstrict(object);
     assertEquals("object", typeof result);
 
-    %PrepareFunctionForOptimization(strict);
     strict(object);
     strict(object);
     %OptimizeFunctionOnNextCall(strict);
@@ -74,7 +72,6 @@ function test(object, prototype) {
       return s.strict = 10;
     }
 
-    %PrepareFunctionForOptimization(nonstrict);
     nonstrict(object);
     nonstrict(object);
     %OptimizeFunctionOnNextCall(nonstrict);
@@ -82,7 +79,6 @@ function test(object, prototype) {
     nonstrict(object);
     assertEquals("object", typeof result);
 
-    %PrepareFunctionForOptimization(strict);
     strict(object);
     strict(object);
     %OptimizeFunctionOnNextCall(strict);

@@ -6,14 +6,12 @@
 #define V8_PROFILER_ALLOCATION_TRACKER_H_
 
 #include <map>
-#include <vector>
 
-#include "include/v8-persistent-handle.h"
 #include "include/v8-profiler.h"
-#include "include/v8-unwinder.h"
-#include "src/base/hashmap.h"
-#include "src/base/vector.h"
-#include "src/handles/handles.h"
+#include "src/handles.h"
+#include "src/hashmap.h"
+#include "src/list.h"
+#include "src/vector.h"
 
 namespace v8 {
 namespace internal {
@@ -30,8 +28,6 @@ class AllocationTraceNode {
   AllocationTraceNode(AllocationTraceTree* tree,
                       unsigned function_info_index);
   ~AllocationTraceNode();
-  AllocationTraceNode(const AllocationTraceNode&) = delete;
-  AllocationTraceNode& operator=(const AllocationTraceNode&) = delete;
   AllocationTraceNode* FindChild(unsigned function_info_index);
   AllocationTraceNode* FindOrAddChild(unsigned function_info_index);
   void AddAllocation(unsigned size);
@@ -40,9 +36,7 @@ class AllocationTraceNode {
   unsigned allocation_size() const { return total_size_; }
   unsigned allocation_count() const { return allocation_count_; }
   unsigned id() const { return id_; }
-  const std::vector<AllocationTraceNode*>& children() const {
-    return children_;
-  }
+  Vector<AllocationTraceNode*> children() const { return children_.ToVector(); }
 
   void Print(int indent, AllocationTracker* tracker);
 
@@ -52,27 +46,30 @@ class AllocationTraceNode {
   unsigned total_size_;
   unsigned allocation_count_;
   unsigned id_;
-  std::vector<AllocationTraceNode*> children_;
+  List<AllocationTraceNode*> children_;
+
+  DISALLOW_COPY_AND_ASSIGN(AllocationTraceNode);
 };
 
 
 class AllocationTraceTree {
  public:
   AllocationTraceTree();
-  ~AllocationTraceTree() = default;
-  AllocationTraceTree(const AllocationTraceTree&) = delete;
-  AllocationTraceTree& operator=(const AllocationTraceTree&) = delete;
-  AllocationTraceNode* AddPathFromEnd(const base::Vector<unsigned>& path);
+  ~AllocationTraceTree();
+  AllocationTraceNode* AddPathFromEnd(const Vector<unsigned>& path);
   AllocationTraceNode* root() { return &root_; }
   unsigned next_node_id() { return next_node_id_++; }
-  V8_EXPORT_PRIVATE void Print(AllocationTracker* tracker);
+  void Print(AllocationTracker* tracker);
 
  private:
   unsigned next_node_id_;
   AllocationTraceNode root_;
+
+  DISALLOW_COPY_AND_ASSIGN(AllocationTraceTree);
 };
 
-class V8_EXPORT_PRIVATE AddressToTraceMap {
+
+class AddressToTraceMap {
  public:
   void AddRange(Address addr, int size, unsigned node_id);
   unsigned GetTraceNodeId(Address addr);
@@ -89,7 +86,7 @@ class V8_EXPORT_PRIVATE AddressToTraceMap {
     unsigned trace_node_id;
   };
   // [start, end) -> trace
-  using RangeMap = std::map<Address, RangeStack>;
+  typedef std::map<Address, RangeStack> RangeMap;
 
   void RemoveRange(Address start, Address end);
 
@@ -110,49 +107,52 @@ class AllocationTracker {
 
   AllocationTracker(HeapObjectsMap* ids, StringsStorage* names);
   ~AllocationTracker();
-  AllocationTracker(const AllocationTracker&) = delete;
-  AllocationTracker& operator=(const AllocationTracker&) = delete;
 
-  V8_EXPORT_PRIVATE void PrepareForSerialization();
+  void PrepareForSerialization();
   void AllocationEvent(Address addr, int size);
 
   AllocationTraceTree* trace_tree() { return &trace_tree_; }
-  const std::vector<FunctionInfo*>& function_info_list() const {
+  const List<FunctionInfo*>& function_info_list() const {
     return function_info_list_;
   }
   AddressToTraceMap* address_to_trace() { return &address_to_trace_; }
 
  private:
-  unsigned AddFunctionInfo(SharedFunctionInfo info, SnapshotObjectId id);
+  unsigned AddFunctionInfo(SharedFunctionInfo* info, SnapshotObjectId id);
+  static void DeleteFunctionInfo(FunctionInfo** info);
   unsigned functionInfoIndexForVMState(StateTag state);
 
   class UnresolvedLocation {
    public:
-    UnresolvedLocation(Script script, int start, FunctionInfo* info);
+    UnresolvedLocation(Script* script, int start, FunctionInfo* info);
     ~UnresolvedLocation();
     void Resolve();
 
    private:
-    static void HandleWeakScript(const v8::WeakCallbackInfo<void>& data);
+    static void HandleWeakScript(
+        const v8::WeakCallbackData<v8::Value, void>& data);
 
     Handle<Script> script_;
     int start_position_;
     FunctionInfo* info_;
   };
+  static void DeleteUnresolvedLocation(UnresolvedLocation** location);
 
   static const int kMaxAllocationTraceLength = 64;
   HeapObjectsMap* ids_;
   StringsStorage* names_;
   AllocationTraceTree trace_tree_;
   unsigned allocation_trace_buffer_[kMaxAllocationTraceLength];
-  std::vector<FunctionInfo*> function_info_list_;
-  base::HashMap id_to_function_info_index_;
-  std::vector<UnresolvedLocation*> unresolved_locations_;
+  List<FunctionInfo*> function_info_list_;
+  HashMap id_to_function_info_index_;
+  List<UnresolvedLocation*> unresolved_locations_;
   unsigned info_index_for_other_state_;
   AddressToTraceMap address_to_trace_;
+
+  DISALLOW_COPY_AND_ASSIGN(AllocationTracker);
 };
 
 }  // namespace internal
 }  // namespace v8
 
-#endif  // V8_PROFILER_ALLOCATION_TRACKER_H_
+#endif  // V8_ALLOCATION_TRACKER_H_

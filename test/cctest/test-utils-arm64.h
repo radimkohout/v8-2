@@ -28,19 +28,16 @@
 #ifndef V8_ARM64_TEST_UTILS_ARM64_H_
 #define V8_ARM64_TEST_UTILS_ARM64_H_
 
-#include "src/codegen/arm64/utils-arm64.h"
-#include "src/codegen/macro-assembler.h"
-#include "src/init/v8.h"
+#include "src/v8.h"
 #include "test/cctest/cctest.h"
 
-namespace v8 {
-namespace internal {
+#include "src/arm64/macro-assembler-arm64.h"
+#include "src/arm64/utils-arm64.h"
+#include "src/macro-assembler.h"
 
-// Structure representing Q registers in a RegisterDump.
-struct vec128_t {
-  uint64_t l;
-  uint64_t h;
-};
+
+using namespace v8::internal;
+
 
 // RegisterDump: Object allowing integer, floating point and flags registers
 // to be saved to itself for future reference.
@@ -49,7 +46,8 @@ class RegisterDump {
   RegisterDump() : completed_(false) {}
 
   // The Dump method generates code to store a snapshot of the register values.
-  // It needs to be able to use the stack temporarily.
+  // It needs to be able to use the stack temporarily, and requires that the
+  // current stack pointer is csp, and is properly aligned.
   //
   // The dumping code is generated though the given MacroAssembler. No registers
   // are corrupted in the process, but the stack is used briefly. The flags will
@@ -73,14 +71,14 @@ class RegisterDump {
     return dump_.x_[code];
   }
 
-  // VRegister accessors.
+  // FPRegister accessors.
   inline uint32_t sreg_bits(unsigned code) const {
     CHECK(FPRegAliasesMatch(code));
     return dump_.s_[code];
   }
 
   inline float sreg(unsigned code) const {
-    return bit_cast<float>(sreg_bits(code));
+    return rawbits_to_float(sreg_bits(code));
   }
 
   inline uint64_t dreg_bits(unsigned code) const {
@@ -89,10 +87,8 @@ class RegisterDump {
   }
 
   inline double dreg(unsigned code) const {
-    return bit_cast<double>(dreg_bits(code));
+    return rawbits_to_double(dreg_bits(code));
   }
-
-  inline vec128_t qreg(unsigned code) const { return dump_.q_[code]; }
 
   // Stack pointer accessors.
   inline int64_t spreg() const {
@@ -108,7 +104,7 @@ class RegisterDump {
   // Flags accessors.
   inline uint32_t flags_nzcv() const {
     CHECK(IsComplete());
-    CHECK_EQ(dump_.flags_ & ~Flags_mask, 0);
+    CHECK((dump_.flags_ & ~Flags_mask) == 0);
     return dump_.flags_ & Flags_mask;
   }
 
@@ -125,7 +121,7 @@ class RegisterDump {
   // ::Dump method, or a failure in the simulator.
   bool RegAliasesMatch(unsigned code) const {
     CHECK(IsComplete());
-    CHECK_LT(code, kNumberOfRegisters);
+    CHECK(code < kNumberOfRegisters);
     return ((dump_.x_[code] & kWRegMask) == dump_.w_[code]);
   }
 
@@ -138,7 +134,7 @@ class RegisterDump {
   // As RegAliasesMatch, but for floating-point registers.
   bool FPRegAliasesMatch(unsigned code) const {
     CHECK(IsComplete());
-    CHECK_LT(code, kNumberOfVRegisters);
+    CHECK(code < kNumberOfFPRegisters);
     return (dump_.d_[code] & kSRegMask) == dump_.s_[code];
   }
 
@@ -150,11 +146,8 @@ class RegisterDump {
     uint32_t w_[kNumberOfRegisters];
 
     // Floating-point registers, as raw bits.
-    uint64_t d_[kNumberOfVRegisters];
-    uint32_t s_[kNumberOfVRegisters];
-
-    // Vector registers.
-    vec128_t q_[kNumberOfVRegisters];
+    uint64_t d_[kNumberOfFPRegisters];
+    uint32_t s_[kNumberOfFPRegisters];
 
     // The stack pointer.
     uint64_t sp_;
@@ -169,18 +162,12 @@ class RegisterDump {
   } dump_;
 
   static dump_t for_sizeof();
-  static_assert(kXRegSize == kDRegSize, "X and D registers must be same size.");
-  static_assert(kWRegSize == kSRegSize, "W and S registers must be same size.");
-  static_assert(sizeof(for_sizeof().q_[0]) == kQRegSize,
-                "Array elements must be size of Q register.");
-  static_assert(sizeof(for_sizeof().d_[0]) == kDRegSize,
-                "Array elements must be size of D register.");
-  static_assert(sizeof(for_sizeof().s_[0]) == kSRegSize,
-                "Array elements must be size of S register.");
-  static_assert(sizeof(for_sizeof().x_[0]) == kXRegSize,
-                "Array elements must be size of X register.");
-  static_assert(sizeof(for_sizeof().w_[0]) == kWRegSize,
-                "Array elements must be size of W register.");
+  STATIC_ASSERT(sizeof(for_sizeof().d_[0]) == kDRegSize);
+  STATIC_ASSERT(sizeof(for_sizeof().s_[0]) == kSRegSize);
+  STATIC_ASSERT(sizeof(for_sizeof().d_[0]) == kXRegSize);
+  STATIC_ASSERT(sizeof(for_sizeof().s_[0]) == kWRegSize);
+  STATIC_ASSERT(sizeof(for_sizeof().x_[0]) == kXRegSize);
+  STATIC_ASSERT(sizeof(for_sizeof().w_[0]) == kWRegSize);
 };
 
 // Some of these methods don't use the RegisterDump argument, but they have to
@@ -195,25 +182,16 @@ bool Equal32(uint32_t expected, const RegisterDump* core, const Register& reg);
 bool Equal64(uint64_t expected, const RegisterDump* core, const Register& reg);
 
 bool EqualFP32(float expected, const RegisterDump* core,
-               const VRegister& fpreg);
+               const FPRegister& fpreg);
 bool EqualFP64(double expected, const RegisterDump* core,
-               const VRegister& fpreg);
+               const FPRegister& fpreg);
 
 bool Equal64(const Register& reg0, const RegisterDump* core,
              const Register& reg1);
-bool Equal128(uint64_t expected_h, uint64_t expected_l,
-              const RegisterDump* core, const VRegister& reg);
 
 bool EqualNzcv(uint32_t expected, uint32_t result);
 
-// Compares two RegisterDumps, only comparing registers that V8 uses.
-bool EqualV8Registers(const RegisterDump* a, const RegisterDump* b);
-
-// Create an array of type {RegType}, size {Size}, filled with {NoReg}.
-template <typename RegType, size_t Size>
-std::array<RegType, Size> CreateRegisterArray() {
-  return base::make_array<Size>([](size_t) { return RegType::no_reg(); });
-}
+bool EqualRegisters(const RegisterDump* a, const RegisterDump* b);
 
 // Populate the w, x and r arrays with registers from the 'allowed' mask. The
 // r array will be populated with <reg_size>-sized registers,
@@ -222,15 +200,15 @@ std::array<RegType, Size> CreateRegisterArray() {
 // (such as the push and pop tests), but where certain registers must be
 // avoided as they are used for other purposes.
 //
-// Any of w, x, or r can be nullptr if they are not required.
+// Any of w, x, or r can be NULL if they are not required.
 //
 // The return value is a RegList indicating which registers were allocated.
 RegList PopulateRegisterArray(Register* w, Register* x, Register* r,
                               int reg_size, int reg_count, RegList allowed);
 
 // As PopulateRegisterArray, but for floating-point registers.
-RegList PopulateVRegisterArray(VRegister* s, VRegister* d, VRegister* v,
-                               int reg_size, int reg_count, RegList allowed);
+RegList PopulateFPRegisterArray(FPRegister* s, FPRegister* d, FPRegister* v,
+                                int reg_size, int reg_count, RegList allowed);
 
 // Ovewrite the contents of the specified registers. This enables tests to
 // check that register contents are written in cases where it's likely that the
@@ -241,7 +219,7 @@ RegList PopulateVRegisterArray(VRegister* s, VRegister* d, VRegister* v,
 // top word anyway, so clobbering the full X registers should make tests more
 // rigorous.
 void Clobber(MacroAssembler* masm, RegList reg_list,
-             uint64_t const value = 0xFEDCBA9876543210UL);
+             uint64_t const value = 0xfedcba9876543210UL);
 
 // As Clobber, but for FP registers.
 void ClobberFP(MacroAssembler* masm, RegList reg_list,
@@ -251,8 +229,5 @@ void ClobberFP(MacroAssembler* masm, RegList reg_list,
 // using this method, the clobber value is always the default for the basic
 // Clobber or ClobberFP functions.
 void Clobber(MacroAssembler* masm, CPURegList reg_list);
-
-}  // namespace internal
-}  // namespace v8
 
 #endif  // V8_ARM64_TEST_UTILS_ARM64_H_

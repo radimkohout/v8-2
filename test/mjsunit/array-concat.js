@@ -29,19 +29,6 @@
  * @fileoverview Test concat on small and large arrays
  */
 
-
-(function testStringWrapperConcat() {
-  var concat = Array.prototype.concat;
-  var str = new String('abcd');
-  assertEquals([1,2,3,new String('abcd')], [1, 2, 3].concat(str));
-  assertEquals([new String("abcd")], concat.call(str));
-
-  var array = [1, 2, 3];
-  array.__proto__ = str;
-  array.length = 4;
-  assertEquals([1,2,3,'d'], concat.call(array));
-})()
-
 var poses;
 
 poses = [140, 4000000000];
@@ -225,33 +212,15 @@ assertEquals([undefined,2,1,3,"X"], r2);
 
 // Make first array change length of second array massively.
 arr2.length = 2;
-var largeLength = 500000;
 Object.defineProperty(arr1, 0, {get: function() {
-      arr2[largeLength] = "X";
+      arr2[500000] = "X";
       return undefined;
     }, configurable: true})
 var r3 = [].concat(arr1, arr2);  // [undefined,2,1,3,"X"]
 var expected = [undefined,2,1,3];
-var initialLen = expected.length;
-expected[largeLength + 2] = "X";
+expected[500000 + 2] = "X";
 
-var numElementsToCheck = 10;
-
-// Checking entire massive array is too slow, so check:
-// - the length,
-assertEquals(expected.length, r3.length);
-var slicesToCheck = [
-  // - the first few elements,
-  {start: 0, end: initialLen},
-  // - arbitrary number of elements past the first few elements,
-  {start: initialLen, end: initialLen + numElementsToCheck},
-  // - arbitrary number of elements in the middle of the array
-  {start: largeLength / 2, end: largeLength / 2 + numElementsToCheck},
-  // - last few elements
-  {start: largeLength, end: largeLength + 3}];
-for (const {start, end} of slicesToCheck) {
-  assertEquals(expected.slice(start, end), r3.slice(start, end));
-}
+assertEquals(expected, r3);
 
 var arr3 = [];
 var trace = [];

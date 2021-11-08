@@ -5,14 +5,9 @@
 #ifndef V8_UNITTESTS_COMPILER_GRAPH_UNITTEST_H_
 #define V8_UNITTESTS_COMPILER_GRAPH_UNITTEST_H_
 
-#include "src/codegen/tick-counter.h"
 #include "src/compiler/common-operator.h"
-#include "src/compiler/compiler-source-position-table.h"
 #include "src/compiler/graph.h"
-#include "src/compiler/js-heap-broker.h"
-#include "src/compiler/node-origin-table.h"
 #include "src/compiler/typer.h"
-#include "src/handles/handles.h"
 #include "test/unittests/test-utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -20,22 +15,25 @@ namespace v8 {
 namespace internal {
 
 // Forward declarations.
+template <class T>
+class Handle;
 class HeapObject;
 
 namespace compiler {
 
 using ::testing::Matcher;
 
-class GraphTest : public TestWithNativeContextAndZone {
+
+class GraphTest : public TestWithContext, public TestWithIsolateAndZone {
  public:
   explicit GraphTest(int num_parameters = 1);
   ~GraphTest() override;
 
+ protected:
   Node* start() { return graph()->start(); }
   Node* end() { return graph()->end(); }
 
   Node* Parameter(int32_t index = 0);
-  Node* Parameter(Type type, int32_t index = 0);
   Node* Float32Constant(volatile float value);
   Node* Float64Constant(volatile double value);
   Node* Int32Constant(int32_t value);
@@ -51,29 +49,16 @@ class GraphTest : public TestWithNativeContextAndZone {
 
   Node* EmptyFrameState();
 
-  Matcher<Node*> IsBooleanConstant(bool value) {
-    return value ? IsTrueConstant() : IsFalseConstant();
-  }
   Matcher<Node*> IsFalseConstant();
   Matcher<Node*> IsTrueConstant();
-  Matcher<Node*> IsNullConstant();
   Matcher<Node*> IsUndefinedConstant();
 
   CommonOperatorBuilder* common() { return &common_; }
   Graph* graph() { return &graph_; }
-  SourcePositionTable* source_positions() { return &source_positions_; }
-  NodeOriginTable* node_origins() { return &node_origins_; }
-  JSHeapBroker* broker() { return &broker_; }
-  TickCounter* tick_counter() { return &tick_counter_; }
 
  private:
-  CanonicalHandleScope canonical_;
   CommonOperatorBuilder common_;
   Graph graph_;
-  JSHeapBroker broker_;
-  SourcePositionTable source_positions_;
-  NodeOriginTable node_origins_;
-  TickCounter tick_counter_;
 };
 
 
@@ -83,6 +68,9 @@ class TypedGraphTest : public GraphTest {
   ~TypedGraphTest() override;
 
  protected:
+  Node* Parameter(int32_t index = 0) { return GraphTest::Parameter(index); }
+  Node* Parameter(Type* type, int32_t index = 0);
+
   Typer* typer() { return &typer_; }
 
  private:

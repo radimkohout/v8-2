@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --allow-natives-syntax --no-stress-opt --opt --no-always-opt
+// Flags: --allow-natives-syntax
+// Flags: --nostress-opt
 
 // --nostress-opt is specified because the test corrupts the "pristine"
 // array prototype chain by storing an element, and this is tracked
@@ -11,7 +12,6 @@
 
 function foo(a, i) { return a[i]; }
 
-%PrepareFunctionForOptimization(foo);
 var a = ['one', , 'three'];
 foo(a, 0);
 foo(a, 0);

@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "test/unittests/compiler/backend/instruction-selector-unittest.h"
-
-#include "src/objects/objects-inl.h"
+#include "test/unittests/compiler/instruction-selector-unittest.h"
 
 namespace v8 {
 namespace internal {
@@ -15,7 +13,7 @@ namespace {
 // Immediates (random subset).
 const int32_t kImmediates[] = {kMinInt, -42, -1,   0,      1,          2,
                                3,       4,   5,    6,      7,          8,
-                               16,      42,  0xFF, 0xFFFF, 0x0F0F0F0F, kMaxInt};
+                               16,      42,  0xff, 0xffff, 0x0f0f0f0f, kMaxInt};
 
 }  // namespace
 
@@ -95,7 +93,7 @@ TEST_F(InstructionSelectorTest, ChangeFloat32ToFloat64WithParameter) {
   m.Return(m.ChangeFloat32ToFloat64(m.Parameter(0)));
   Stream s = m.Build();
   ASSERT_EQ(1U, s.size());
-  EXPECT_EQ(kIA32Float32ToFloat64, s[0]->arch_opcode());
+  EXPECT_EQ(kSSEFloat32ToFloat64, s[0]->arch_opcode());
   EXPECT_EQ(1U, s[0]->InputCount());
   EXPECT_EQ(1U, s[0]->OutputCount());
 }
@@ -106,7 +104,7 @@ TEST_F(InstructionSelectorTest, TruncateFloat64ToFloat32WithParameter) {
   m.Return(m.TruncateFloat64ToFloat32(m.Parameter(0)));
   Stream s = m.Build();
   ASSERT_EQ(1U, s.size());
-  EXPECT_EQ(kIA32Float64ToFloat32, s[0]->arch_opcode());
+  EXPECT_EQ(kSSEFloat64ToFloat32, s[0]->arch_opcode());
   EXPECT_EQ(1U, s[0]->InputCount());
   EXPECT_EQ(1U, s[0]->OutputCount());
 }
@@ -161,7 +159,7 @@ TEST_F(InstructionSelectorTest, ChangeUint32ToFloat64WithParameter) {
   m.Return(m.ChangeUint32ToFloat64(m.Parameter(0)));
   Stream s = m.Build();
   ASSERT_EQ(1U, s.size());
-  EXPECT_EQ(kIA32Uint32ToFloat64, s[0]->arch_opcode());
+  EXPECT_EQ(kSSEUint32ToFloat64, s[0]->arch_opcode());
 }
 
 
@@ -195,8 +193,10 @@ static const MemoryAccess kMemoryAccesses[] = {
 
 }  // namespace
 
-using InstructionSelectorMemoryAccessTest =
-    InstructionSelectorTestWithParam<MemoryAccess>;
+
+typedef InstructionSelectorTestWithParam<MemoryAccess>
+    InstructionSelectorMemoryAccessTest;
+
 
 TEST_P(InstructionSelectorMemoryAccessTest, LoadWithParameters) {
   const MemoryAccess memacc = GetParam();
@@ -311,9 +311,11 @@ TEST_P(InstructionSelectorMemoryAccessTest, StoreWithImmediateIndex) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(InstructionSelectorTest,
-                         InstructionSelectorMemoryAccessTest,
-                         ::testing::ValuesIn(kMemoryAccesses));
+
+INSTANTIATE_TEST_CASE_P(InstructionSelectorTest,
+                        InstructionSelectorMemoryAccessTest,
+                        ::testing::ValuesIn(kMemoryAccesses));
+
 
 // -----------------------------------------------------------------------------
 // AddressingMode for loads and stores.
@@ -321,8 +323,8 @@ INSTANTIATE_TEST_SUITE_P(InstructionSelectorTest,
 
 class AddressingModeUnitTest : public InstructionSelectorTest {
  public:
-  AddressingModeUnitTest() : m(nullptr) { Reset(); }
-  ~AddressingModeUnitTest() override { delete m; }
+  AddressingModeUnitTest() : m(NULL) { Reset(); }
+  ~AddressingModeUnitTest() { delete m; }
 
   void Run(Node* base, Node* load_index, Node* store_index,
            AddressingMode mode) {
@@ -506,7 +508,9 @@ const MultParam kMultParams[] = {{-1, false, kMode_None},
 
 }  // namespace
 
-using InstructionSelectorMultTest = InstructionSelectorTestWithParam<MultParam>;
+
+typedef InstructionSelectorTestWithParam<MultParam> InstructionSelectorMultTest;
+
 
 static unsigned InputCountForLea(AddressingMode mode) {
   switch (mode) {
@@ -535,6 +539,7 @@ static unsigned InputCountForLea(AddressingMode mode) {
       return 1U;
     default:
       UNREACHABLE();
+      return 0U;
   }
 }
 
@@ -563,6 +568,7 @@ static AddressingMode AddressingModeForAddMult(int32_t imm,
       return kMode_MRI;
     default:
       UNREACHABLE();
+      return kMode_None;
   }
 }
 
@@ -616,8 +622,10 @@ TEST_P(InstructionSelectorMultTest, MultAdd32) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(InstructionSelectorTest, InstructionSelectorMultTest,
-                         ::testing::ValuesIn(kMultParams));
+
+INSTANTIATE_TEST_CASE_P(InstructionSelectorTest, InstructionSelectorMultTest,
+                        ::testing::ValuesIn(kMultParams));
+
 
 TEST_F(InstructionSelectorTest, Int32MulHigh) {
   StreamBuilder m(this, MachineType::Int32(), MachineType::Int32(),
@@ -641,99 +649,8 @@ TEST_F(InstructionSelectorTest, Int32MulHigh) {
 
 
 // -----------------------------------------------------------------------------
-// Binops with a memory operand.
-
-TEST_F(InstructionSelectorTest, LoadAnd32) {
-  StreamBuilder m(this, MachineType::Int32(), MachineType::Int32(),
-                  MachineType::Int32());
-  Node* const p0 = m.Parameter(0);
-  Node* const p1 = m.Parameter(1);
-  m.Return(
-      m.Word32And(p0, m.Load(MachineType::Int32(), p1, m.Int32Constant(127))));
-  Stream s = m.Build();
-  ASSERT_EQ(1U, s.size());
-  EXPECT_EQ(kIA32And, s[0]->arch_opcode());
-  ASSERT_EQ(3U, s[0]->InputCount());
-  EXPECT_EQ(s.ToVreg(p0), s.ToVreg(s[0]->InputAt(0)));
-  EXPECT_EQ(s.ToVreg(p1), s.ToVreg(s[0]->InputAt(1)));
-}
-
-TEST_F(InstructionSelectorTest, LoadImmutableAnd32) {
-  StreamBuilder m(this, MachineType::Int32(), MachineType::Int32(),
-                  MachineType::Int32());
-  Node* const p0 = m.Parameter(0);
-  Node* const p1 = m.Parameter(1);
-  m.Return(m.Word32And(
-      p0, m.LoadImmutable(MachineType::Int32(), p1, m.Int32Constant(127))));
-  Stream s = m.Build();
-  ASSERT_EQ(1U, s.size());
-  EXPECT_EQ(kIA32And, s[0]->arch_opcode());
-  ASSERT_EQ(3U, s[0]->InputCount());
-  EXPECT_EQ(s.ToVreg(p0), s.ToVreg(s[0]->InputAt(0)));
-  EXPECT_EQ(s.ToVreg(p1), s.ToVreg(s[0]->InputAt(1)));
-}
-
-TEST_F(InstructionSelectorTest, LoadOr32) {
-  StreamBuilder m(this, MachineType::Int32(), MachineType::Int32(),
-                  MachineType::Int32());
-  Node* const p0 = m.Parameter(0);
-  Node* const p1 = m.Parameter(1);
-  m.Return(
-      m.Word32Or(p0, m.Load(MachineType::Int32(), p1, m.Int32Constant(127))));
-  Stream s = m.Build();
-  ASSERT_EQ(1U, s.size());
-  EXPECT_EQ(kIA32Or, s[0]->arch_opcode());
-  ASSERT_EQ(3U, s[0]->InputCount());
-  EXPECT_EQ(s.ToVreg(p0), s.ToVreg(s[0]->InputAt(0)));
-  EXPECT_EQ(s.ToVreg(p1), s.ToVreg(s[0]->InputAt(1)));
-}
-
-TEST_F(InstructionSelectorTest, LoadXor32) {
-  StreamBuilder m(this, MachineType::Int32(), MachineType::Int32(),
-                  MachineType::Int32());
-  Node* const p0 = m.Parameter(0);
-  Node* const p1 = m.Parameter(1);
-  m.Return(
-      m.Word32Xor(p0, m.Load(MachineType::Int32(), p1, m.Int32Constant(127))));
-  Stream s = m.Build();
-  ASSERT_EQ(1U, s.size());
-  EXPECT_EQ(kIA32Xor, s[0]->arch_opcode());
-  ASSERT_EQ(3U, s[0]->InputCount());
-  EXPECT_EQ(s.ToVreg(p0), s.ToVreg(s[0]->InputAt(0)));
-  EXPECT_EQ(s.ToVreg(p1), s.ToVreg(s[0]->InputAt(1)));
-}
-
-TEST_F(InstructionSelectorTest, LoadAdd32) {
-  StreamBuilder m(this, MachineType::Int32(), MachineType::Int32(),
-                  MachineType::Int32());
-  Node* const p0 = m.Parameter(0);
-  Node* const p1 = m.Parameter(1);
-  m.Return(
-      m.Int32Add(p0, m.Load(MachineType::Int32(), p1, m.Int32Constant(127))));
-  Stream s = m.Build();
-  // Use lea instead of add, so memory operand is invalid.
-  ASSERT_EQ(2U, s.size());
-  EXPECT_EQ(kIA32Movl, s[0]->arch_opcode());
-  EXPECT_EQ(kIA32Lea, s[1]->arch_opcode());
-}
-
-TEST_F(InstructionSelectorTest, LoadSub32) {
-  StreamBuilder m(this, MachineType::Int32(), MachineType::Int32(),
-                  MachineType::Int32());
-  Node* const p0 = m.Parameter(0);
-  Node* const p1 = m.Parameter(1);
-  m.Return(
-      m.Int32Sub(p0, m.Load(MachineType::Int32(), p1, m.Int32Constant(127))));
-  Stream s = m.Build();
-  ASSERT_EQ(1U, s.size());
-  EXPECT_EQ(kIA32Sub, s[0]->arch_opcode());
-  ASSERT_EQ(3U, s[0]->InputCount());
-  EXPECT_EQ(s.ToVreg(p0), s.ToVreg(s[0]->InputAt(0)));
-  EXPECT_EQ(s.ToVreg(p1), s.ToVreg(s[0]->InputAt(1)));
-}
-
-// -----------------------------------------------------------------------------
 // Floating point operations.
+
 
 TEST_F(InstructionSelectorTest, Float32Abs) {
   {
@@ -743,7 +660,7 @@ TEST_F(InstructionSelectorTest, Float32Abs) {
     m.Return(n);
     Stream s = m.Build();
     ASSERT_EQ(1U, s.size());
-    EXPECT_EQ(kFloat32Abs, s[0]->arch_opcode());
+    EXPECT_EQ(kSSEFloat32Abs, s[0]->arch_opcode());
     ASSERT_EQ(1U, s[0]->InputCount());
     EXPECT_EQ(s.ToVreg(p0), s.ToVreg(s[0]->InputAt(0)));
     ASSERT_EQ(1U, s[0]->OutputCount());
@@ -758,7 +675,7 @@ TEST_F(InstructionSelectorTest, Float32Abs) {
     m.Return(n);
     Stream s = m.Build(AVX);
     ASSERT_EQ(1U, s.size());
-    EXPECT_EQ(kFloat32Abs, s[0]->arch_opcode());
+    EXPECT_EQ(kAVXFloat32Abs, s[0]->arch_opcode());
     ASSERT_EQ(1U, s[0]->InputCount());
     EXPECT_EQ(s.ToVreg(p0), s.ToVreg(s[0]->InputAt(0)));
     ASSERT_EQ(1U, s[0]->OutputCount());
@@ -776,7 +693,7 @@ TEST_F(InstructionSelectorTest, Float64Abs) {
     m.Return(n);
     Stream s = m.Build();
     ASSERT_EQ(1U, s.size());
-    EXPECT_EQ(kFloat64Abs, s[0]->arch_opcode());
+    EXPECT_EQ(kSSEFloat64Abs, s[0]->arch_opcode());
     ASSERT_EQ(1U, s[0]->InputCount());
     EXPECT_EQ(s.ToVreg(p0), s.ToVreg(s[0]->InputAt(0)));
     ASSERT_EQ(1U, s[0]->OutputCount());
@@ -791,7 +708,7 @@ TEST_F(InstructionSelectorTest, Float64Abs) {
     m.Return(n);
     Stream s = m.Build(AVX);
     ASSERT_EQ(1U, s.size());
-    EXPECT_EQ(kFloat64Abs, s[0]->arch_opcode());
+    EXPECT_EQ(kAVXFloat64Abs, s[0]->arch_opcode());
     ASSERT_EQ(1U, s[0]->InputCount());
     EXPECT_EQ(s.ToVreg(p0), s.ToVreg(s[0]->InputAt(0)));
     ASSERT_EQ(1U, s[0]->OutputCount());
@@ -812,10 +729,10 @@ TEST_F(InstructionSelectorTest, Float64BinopArithmetic) {
     m.Return(ret);
     Stream s = m.Build(AVX);
     ASSERT_EQ(4U, s.size());
-    EXPECT_EQ(kFloat64Add, s[0]->arch_opcode());
-    EXPECT_EQ(kFloat64Mul, s[1]->arch_opcode());
-    EXPECT_EQ(kFloat64Sub, s[2]->arch_opcode());
-    EXPECT_EQ(kFloat64Div, s[3]->arch_opcode());
+    EXPECT_EQ(kAVXFloat64Add, s[0]->arch_opcode());
+    EXPECT_EQ(kAVXFloat64Mul, s[1]->arch_opcode());
+    EXPECT_EQ(kAVXFloat64Sub, s[2]->arch_opcode());
+    EXPECT_EQ(kAVXFloat64Div, s[3]->arch_opcode());
   }
   {
     StreamBuilder m(this, MachineType::Float64(), MachineType::Float64(),
@@ -827,15 +744,100 @@ TEST_F(InstructionSelectorTest, Float64BinopArithmetic) {
     m.Return(ret);
     Stream s = m.Build();
     ASSERT_EQ(4U, s.size());
-    EXPECT_EQ(kFloat64Add, s[0]->arch_opcode());
-    EXPECT_EQ(kFloat64Mul, s[1]->arch_opcode());
-    EXPECT_EQ(kFloat64Sub, s[2]->arch_opcode());
-    EXPECT_EQ(kFloat64Div, s[3]->arch_opcode());
+    EXPECT_EQ(kSSEFloat64Add, s[0]->arch_opcode());
+    EXPECT_EQ(kSSEFloat64Mul, s[1]->arch_opcode());
+    EXPECT_EQ(kSSEFloat64Sub, s[2]->arch_opcode());
+    EXPECT_EQ(kSSEFloat64Div, s[3]->arch_opcode());
   }
 }
 
+
+TEST_F(InstructionSelectorTest, Float32SubWithMinusZeroAndParameter) {
+  {
+    StreamBuilder m(this, MachineType::Float32(), MachineType::Float32());
+    Node* const p0 = m.Parameter(0);
+    Node* const n = m.Float32Sub(m.Float32Constant(-0.0f), p0);
+    m.Return(n);
+    Stream s = m.Build();
+    ASSERT_EQ(1U, s.size());
+    EXPECT_EQ(kSSEFloat32Neg, s[0]->arch_opcode());
+    ASSERT_EQ(1U, s[0]->InputCount());
+    EXPECT_EQ(s.ToVreg(p0), s.ToVreg(s[0]->InputAt(0)));
+    ASSERT_EQ(1U, s[0]->OutputCount());
+    EXPECT_EQ(s.ToVreg(n), s.ToVreg(s[0]->Output()));
+    EXPECT_EQ(kFlags_none, s[0]->flags_mode());
+  }
+  {
+    StreamBuilder m(this, MachineType::Float32(), MachineType::Float32());
+    Node* const p0 = m.Parameter(0);
+    Node* const n = m.Float32Sub(m.Float32Constant(-0.0f), p0);
+    m.Return(n);
+    Stream s = m.Build(AVX);
+    ASSERT_EQ(1U, s.size());
+    EXPECT_EQ(kAVXFloat32Neg, s[0]->arch_opcode());
+    ASSERT_EQ(1U, s[0]->InputCount());
+    EXPECT_EQ(s.ToVreg(p0), s.ToVreg(s[0]->InputAt(0)));
+    ASSERT_EQ(1U, s[0]->OutputCount());
+    EXPECT_EQ(s.ToVreg(n), s.ToVreg(s[0]->Output()));
+    EXPECT_EQ(kFlags_none, s[0]->flags_mode());
+  }
+}
+
+
+TEST_F(InstructionSelectorTest, Float64SubWithMinusZeroAndParameter) {
+  {
+    StreamBuilder m(this, MachineType::Float64(), MachineType::Float64());
+    Node* const p0 = m.Parameter(0);
+    Node* const n = m.Float64Sub(m.Float64Constant(-0.0), p0);
+    m.Return(n);
+    Stream s = m.Build();
+    ASSERT_EQ(1U, s.size());
+    EXPECT_EQ(kSSEFloat64Neg, s[0]->arch_opcode());
+    ASSERT_EQ(1U, s[0]->InputCount());
+    EXPECT_EQ(s.ToVreg(p0), s.ToVreg(s[0]->InputAt(0)));
+    ASSERT_EQ(1U, s[0]->OutputCount());
+    EXPECT_EQ(s.ToVreg(n), s.ToVreg(s[0]->Output()));
+    EXPECT_EQ(kFlags_none, s[0]->flags_mode());
+  }
+  {
+    StreamBuilder m(this, MachineType::Float64(), MachineType::Float64());
+    Node* const p0 = m.Parameter(0);
+    Node* const n = m.Float64Sub(m.Float64Constant(-0.0), p0);
+    m.Return(n);
+    Stream s = m.Build(AVX);
+    ASSERT_EQ(1U, s.size());
+    EXPECT_EQ(kAVXFloat64Neg, s[0]->arch_opcode());
+    ASSERT_EQ(1U, s[0]->InputCount());
+    EXPECT_EQ(s.ToVreg(p0), s.ToVreg(s[0]->InputAt(0)));
+    ASSERT_EQ(1U, s[0]->OutputCount());
+    EXPECT_EQ(s.ToVreg(n), s.ToVreg(s[0]->Output()));
+    EXPECT_EQ(kFlags_none, s[0]->flags_mode());
+  }
+}
+
+
 // -----------------------------------------------------------------------------
 // Miscellaneous.
+
+
+TEST_F(InstructionSelectorTest, Uint32LessThanWithLoadAndLoadStackPointer) {
+  StreamBuilder m(this, MachineType::Bool());
+  Node* const sl = m.Load(
+      MachineType::Pointer(),
+      m.ExternalConstant(ExternalReference::address_of_stack_limit(isolate())));
+  Node* const sp = m.LoadStackPointer();
+  Node* const n = m.Uint32LessThan(sl, sp);
+  m.Return(n);
+  Stream s = m.Build();
+  ASSERT_EQ(1U, s.size());
+  EXPECT_EQ(kIA32StackCheck, s[0]->arch_opcode());
+  ASSERT_EQ(0U, s[0]->InputCount());
+  ASSERT_EQ(1U, s[0]->OutputCount());
+  EXPECT_EQ(s.ToVreg(n), s.ToVreg(s[0]->Output()));
+  EXPECT_EQ(kFlags_set, s[0]->flags_mode());
+  EXPECT_EQ(kUnsignedGreaterThan, s[0]->flags_condition());
+}
+
 
 TEST_F(InstructionSelectorTest, Word32Clz) {
   StreamBuilder m(this, MachineType::Uint32(), MachineType::Uint32());
@@ -850,100 +852,6 @@ TEST_F(InstructionSelectorTest, Word32Clz) {
   ASSERT_EQ(1U, s[0]->OutputCount());
   EXPECT_EQ(s.ToVreg(n), s.ToVreg(s[0]->Output()));
 }
-
-// SIMD.
-
-TEST_F(InstructionSelectorTest, SIMDSplatZero) {
-  // Test optimization for splat of contant 0.
-  // {i8x16,i16x8,i32x4,i64x2}.splat(const(0)) -> v128.zero().
-  // Optimizations for f32x4.splat and f64x2.splat not implemented since it
-  // doesn't improve the codegen as much (same number of instructions).
-  {
-    StreamBuilder m(this, MachineType::Simd128());
-    Node* const splat =
-        m.I64x2SplatI32Pair(m.Int32Constant(0), m.Int32Constant(0));
-    m.Return(splat);
-    Stream s = m.Build();
-    ASSERT_EQ(1U, s.size());
-    EXPECT_EQ(kIA32S128Zero, s[0]->arch_opcode());
-    ASSERT_EQ(0U, s[0]->InputCount());
-    EXPECT_EQ(1U, s[0]->OutputCount());
-  }
-  {
-    StreamBuilder m(this, MachineType::Simd128());
-    Node* const splat = m.I32x4Splat(m.Int32Constant(0));
-    m.Return(splat);
-    Stream s = m.Build();
-    ASSERT_EQ(1U, s.size());
-    EXPECT_EQ(kIA32S128Zero, s[0]->arch_opcode());
-    ASSERT_EQ(0U, s[0]->InputCount());
-    EXPECT_EQ(1U, s[0]->OutputCount());
-  }
-  {
-    StreamBuilder m(this, MachineType::Simd128());
-    Node* const splat = m.I16x8Splat(m.Int32Constant(0));
-    m.Return(splat);
-    Stream s = m.Build();
-    ASSERT_EQ(1U, s.size());
-    EXPECT_EQ(kIA32S128Zero, s[0]->arch_opcode());
-    ASSERT_EQ(0U, s[0]->InputCount());
-    EXPECT_EQ(1U, s[0]->OutputCount());
-  }
-  {
-    StreamBuilder m(this, MachineType::Simd128());
-    Node* const splat = m.I8x16Splat(m.Int32Constant(0));
-    m.Return(splat);
-    Stream s = m.Build();
-    ASSERT_EQ(1U, s.size());
-    EXPECT_EQ(kIA32S128Zero, s[0]->arch_opcode());
-    ASSERT_EQ(0U, s[0]->InputCount());
-    EXPECT_EQ(1U, s[0]->OutputCount());
-  }
-}
-
-struct SwizzleConstants {
-  uint8_t shuffle[kSimd128Size];
-  bool omit_add;
-};
-
-static constexpr SwizzleConstants kSwizzleConstants[] = {
-    {
-        // all lanes < kSimd128Size
-        {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
-        true,
-    },
-    {
-        // lanes that are >= kSimd128Size have top bit set
-        {12, 13, 14, 15, 0x90, 0x91, 0x92, 0x93, 0xA0, 0xA1, 0xA2, 0xA3, 0xFC,
-         0xFD, 0xFE, 0xFF},
-        true,
-    },
-    {
-        {12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27},
-        false,
-    },
-};
-
-using InstructionSelectorSIMDSwizzleConstantTest =
-    InstructionSelectorTestWithParam<SwizzleConstants>;
-
-TEST_P(InstructionSelectorSIMDSwizzleConstantTest, SimdSwizzleConstant) {
-  // Test optimization of swizzle with constant indices.
-  auto param = GetParam();
-  StreamBuilder m(this, MachineType::Simd128(), MachineType::Simd128());
-  Node* const c = m.S128Const(param.shuffle);
-  Node* swizzle = m.AddNode(m.machine()->I8x16Swizzle(), m.Parameter(0), c);
-  m.Return(swizzle);
-  Stream s = m.Build();
-  ASSERT_EQ(2U, s.size());
-  ASSERT_EQ(kIA32I8x16Swizzle, s[1]->arch_opcode());
-  ASSERT_EQ(param.omit_add, s[1]->misc());
-  ASSERT_EQ(1U, s[0]->OutputCount());
-}
-
-INSTANTIATE_TEST_SUITE_P(InstructionSelectorTest,
-                         InstructionSelectorSIMDSwizzleConstantTest,
-                         ::testing::ValuesIn(kSwizzleConstants));
 
 }  // namespace compiler
 }  // namespace internal

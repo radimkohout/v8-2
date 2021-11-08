@@ -35,7 +35,6 @@ function f(a,b,c) {
   return 42;
 }
 
-%PrepareFunctionForOptimization(g);
 var object = { };
 object.f = f;
 for (var i = 0; i < 5; i++) {

@@ -5,8 +5,6 @@
 #ifndef V8_COMPILER_JS_INTRINSIC_LOWERING_H_
 #define V8_COMPILER_JS_INTRINSIC_LOWERING_H_
 
-#include "src/base/compiler-specific.h"
-#include "src/common/globals.h"
 #include "src/compiler/common-operator.h"
 #include "src/compiler/graph-reducer.h"
 
@@ -15,82 +13,84 @@ namespace internal {
 
 // Forward declarations.
 class Callable;
+class TypeCache;
 
 
 namespace compiler {
 
 // Forward declarations.
 class CommonOperatorBuilder;
-struct FieldAccess;
 class JSOperatorBuilder;
 class JSGraph;
+class MachineOperatorBuilder;
 class SimplifiedOperatorBuilder;
 
 
 // Lowers certain JS-level runtime calls.
-class V8_EXPORT_PRIVATE JSIntrinsicLowering final
-    : public NON_EXPORTED_BASE(AdvancedReducer) {
+class JSIntrinsicLowering final : public AdvancedReducer {
  public:
-  JSIntrinsicLowering(Editor* editor, JSGraph* jsgraph, JSHeapBroker* broker);
-  ~JSIntrinsicLowering() final = default;
+  enum DeoptimizationMode { kDeoptimizationEnabled, kDeoptimizationDisabled };
 
-  const char* reducer_name() const override { return "JSIntrinsicLowering"; }
+  JSIntrinsicLowering(Editor* editor, JSGraph* jsgraph,
+                      DeoptimizationMode mode);
+  ~JSIntrinsicLowering() final {}
 
   Reduction Reduce(Node* node) final;
 
  private:
-  Reduction ReduceCopyDataProperties(Node* node);
+  Reduction ReduceConstructDouble(Node* node);
   Reduction ReduceCreateIterResultObject(Node* node);
   Reduction ReduceDeoptimizeNow(Node* node);
-  Reduction ReduceCreateJSGeneratorObject(Node* node);
-  Reduction ReduceGeneratorClose(Node* node);
-  Reduction ReduceAsyncFunctionAwaitCaught(Node* node);
-  Reduction ReduceAsyncFunctionAwaitUncaught(Node* node);
-  Reduction ReduceAsyncFunctionEnter(Node* node);
-  Reduction ReduceAsyncFunctionReject(Node* node);
-  Reduction ReduceAsyncFunctionResolve(Node* node);
-  Reduction ReduceAsyncGeneratorAwaitCaught(Node* node);
-  Reduction ReduceAsyncGeneratorAwaitUncaught(Node* node);
-  Reduction ReduceAsyncGeneratorReject(Node* node);
-  Reduction ReduceAsyncGeneratorResolve(Node* node);
-  Reduction ReduceAsyncGeneratorYield(Node* node);
-  Reduction ReduceGeneratorGetResumeMode(Node* node);
+  Reduction ReduceDoubleHi(Node* node);
+  Reduction ReduceDoubleLo(Node* node);
+  Reduction ReduceIncrementStatsCounter(Node* node);
   Reduction ReduceIsInstanceType(Node* node, InstanceType instance_type);
   Reduction ReduceIsJSReceiver(Node* node);
-  Reduction ReduceIsBeingInterpreted(Node* node);
-  Reduction ReduceTurbofanStaticAssert(Node* node);
-  Reduction ReduceVerifyType(Node* node);
+  Reduction ReduceIsSmi(Node* node);
+  Reduction ReduceMathClz32(Node* node);
+  Reduction ReduceMathFloor(Node* node);
+  Reduction ReduceMathSqrt(Node* node);
+  Reduction ReduceValueOf(Node* node);
+  Reduction ReduceFixedArrayGet(Node* node);
+  Reduction ReduceFixedArraySet(Node* node);
+  Reduction ReduceRegExpConstructResult(Node* node);
+  Reduction ReduceRegExpExec(Node* node);
+  Reduction ReduceRegExpFlags(Node* node);
+  Reduction ReduceRegExpSource(Node* node);
+  Reduction ReduceSubString(Node* node);
+  Reduction ReduceToInteger(Node* node);
   Reduction ReduceToLength(Node* node);
+  Reduction ReduceToName(Node* node);
+  Reduction ReduceToNumber(Node* node);
   Reduction ReduceToObject(Node* node);
+  Reduction ReduceToPrimitive(Node* node);
   Reduction ReduceToString(Node* node);
   Reduction ReduceCall(Node* node);
-  Reduction ReduceIncBlockCounter(Node* node);
-  Reduction ReduceGetImportMetaObject(Node* node);
+  Reduction ReduceTailCall(Node* node);
+  Reduction ReduceGetSuperConstructor(Node* node);
 
   Reduction Change(Node* node, const Operator* op);
   Reduction Change(Node* node, const Operator* op, Node* a, Node* b);
   Reduction Change(Node* node, const Operator* op, Node* a, Node* b, Node* c);
   Reduction Change(Node* node, const Operator* op, Node* a, Node* b, Node* c,
                    Node* d);
-
-  enum FrameStateFlag {
-    kNeedsFrameState,
-    kDoesNotNeedFrameState,
-  };
+  Reduction ChangeToUndefined(Node* node, Node* effect = nullptr);
   Reduction Change(Node* node, Callable const& callable,
-                   int stack_parameter_count,
-                   enum FrameStateFlag frame_state_flag = kNeedsFrameState);
+                   int stack_parameter_count);
 
   Graph* graph() const;
   JSGraph* jsgraph() const { return jsgraph_; }
-  JSHeapBroker* broker() const { return broker_; }
   Isolate* isolate() const;
   CommonOperatorBuilder* common() const;
   JSOperatorBuilder* javascript() const;
+  MachineOperatorBuilder* machine() const;
   SimplifiedOperatorBuilder* simplified() const;
+  DeoptimizationMode mode() const { return mode_; }
+  TypeCache const& type_cache() const { return type_cache_; }
 
   JSGraph* const jsgraph_;
-  JSHeapBroker* const broker_;
+  DeoptimizationMode const mode_;
+  TypeCache const& type_cache_;
 };
 
 }  // namespace compiler
