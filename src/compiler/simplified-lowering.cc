@@ -160,6 +160,7 @@ UseInfo TruncatingUseInfoFromRepresentation(MachineRepresentation rep) {
       return UseInfo::Bool();
     case MachineRepresentation::kCompressedPointer:
     case MachineRepresentation::kCompressed:
+    case MachineRepresentation::kCagedPointer:
     case MachineRepresentation::kSimd128:
     case MachineRepresentation::kNone:
       break;
@@ -1073,7 +1074,8 @@ class RepresentationSelector {
     } else if (type.Is(Type::BigInt()) && use.IsUsedAsWord64()) {
       return MachineRepresentation::kWord64;
     } else if (type.Is(Type::ExternalPointer()) ||
-               type.Is(Type::SandboxedExternalPointer())) {
+               type.Is(Type::SandboxedExternalPointer()) ||
+               type.Is(Type::CagedPointer())) {
       return MachineType::PointerRepresentation();
     }
     return MachineRepresentation::kTagged;
@@ -1819,6 +1821,7 @@ class RepresentationSelector {
           // path.
           case CTypeInfo::Type::kInt64:
           case CTypeInfo::Type::kUint64:
+          case CTypeInfo::Type::kAny:
             return UseInfo::CheckedSigned64AsWord64(kIdentifyZeros, feedback);
           case CTypeInfo::Type::kFloat32:
           case CTypeInfo::Type::kFloat64:

@@ -2664,16 +2664,14 @@ class WasmInterpreterInternals {
                      static_cast<float>(a))
         CONVERT_CASE(F32x4UConvertI32x4, int4, i32x4, float4, 4, 0, uint32_t,
                      static_cast<float>(a))
-        CONVERT_CASE(I32x4SConvertF32x4, float4, f32x4, int4, 4, 0, double,
-                     std::isnan(a) ? 0
-                                   : a<kMinInt ? kMinInt : a> kMaxInt
-                                         ? kMaxInt
-                                         : static_cast<int32_t>(a))
-        CONVERT_CASE(I32x4UConvertF32x4, float4, f32x4, int4, 4, 0, double,
-                     std::isnan(a)
-                         ? 0
-                         : a<0 ? 0 : a> kMaxUInt32 ? kMaxUInt32
-                                                   : static_cast<uint32_t>(a))
+        CONVERT_CASE(I32x4SConvertF32x4, float4, f32x4, int4, 4, 0, float,
+                     base::saturated_cast<int32_t>(a))
+        CONVERT_CASE(I32x4UConvertF32x4, float4, f32x4, int4, 4, 0, float,
+                     base::saturated_cast<uint32_t>(a))
+        CONVERT_CASE(I32x4RelaxedTruncF32x4S, float4, f32x4, int4, 4, 0, float,
+                     base::saturated_cast<int32_t>(a))
+        CONVERT_CASE(I32x4RelaxedTruncF32x4U, float4, f32x4, int4, 4, 0, float,
+                     base::saturated_cast<uint32_t>(a))
         CONVERT_CASE(I64x2SConvertI32x4Low, int4, i32x4, int2, 2, 0, int32_t, a)
         CONVERT_CASE(I64x2SConvertI32x4High, int4, i32x4, int2, 2, 2, int32_t,
                      a)
@@ -2703,6 +2701,10 @@ class WasmInterpreterInternals {
                      base::saturated_cast<int32_t>(a))
         CONVERT_CASE(I32x4TruncSatF64x2UZero, float2, f64x2, int4, 2, 0, double,
                      base::saturated_cast<uint32_t>(a))
+        CONVERT_CASE(I32x4RelaxedTruncF64x2SZero, float2, f64x2, int4, 2, 0,
+                     double, base::saturated_cast<int32_t>(a))
+        CONVERT_CASE(I32x4RelaxedTruncF64x2UZero, float2, f64x2, int4, 2, 0,
+                     double, base::saturated_cast<uint32_t>(a))
         CONVERT_CASE(F32x4DemoteF64x2Zero, float2, f64x2, float4, 2, 0, float,
                      DoubleToFloat32(a))
         CONVERT_CASE(F64x2PromoteLowF32x4, float4, f32x4, float2, 2, 0, float,
@@ -4092,21 +4094,20 @@ class WasmInterpreterInternals {
     uint32_t expected_sig_id = module()->canonicalized_type_ids[sig_index];
     DCHECK_EQ(expected_sig_id,
               module()->signature_map.Find(*module()->signature(sig_index)));
-    // Bounds check against table size.
-    if (entry_index >=
-        static_cast<uint32_t>(WasmInstanceObject::IndirectFunctionTableSize(
-            isolate_, instance_object_, table_index))) {
-      return {CallResult::INVALID_FUNC};
-    }
 
-    IndirectFunctionTableEntry entry(instance_object_, table_index,
-                                     entry_index);
+    Handle<WasmIndirectFunctionTable> table =
+        instance_object_->GetIndirectFunctionTable(isolate_, table_index);
+
+    // Bounds check against table size.
+    if (entry_index >= table->size()) return {CallResult::INVALID_FUNC};
+
     // Signature check.
-    if (entry.sig_id() != static_cast<int32_t>(expected_sig_id)) {
+    if (table->sig_ids()[entry_index] != expected_sig_id) {
       return {CallResult::SIGNATURE_MISMATCH};
     }
 
-    Handle<Object> object_ref = handle(entry.object_ref(), isolate_);
+    Handle<Object> object_ref =
+        handle(table->refs().get(entry_index), isolate_);
     // Check that this is an internal call (within the same instance).
     CHECK(object_ref->IsWasmInstanceObject() &&
           instance_object_.is_identical_to(object_ref));
@@ -4116,13 +4117,14 @@ class WasmInterpreterInternals {
 #ifdef DEBUG
     {
       WasmCodeRefScope code_ref_scope;
-      WasmCode* wasm_code = native_module->Lookup(entry.target());
+      WasmCode* wasm_code =
+          native_module->Lookup(table->targets()[entry_index]);
       DCHECK_EQ(native_module, wasm_code->native_module());
       DCHECK_EQ(WasmCode::kJumpTable, wasm_code->kind());
     }
 #endif
-    uint32_t func_index =
-        native_module->GetFunctionIndexFromJumpTableSlot(entry.target());
+    uint32_t func_index = native_module->GetFunctionIndexFromJumpTableSlot(
+        table->targets()[entry_index]);
 
     return {CallResult::INTERNAL, codemap_.GetCode(func_index)};
   }

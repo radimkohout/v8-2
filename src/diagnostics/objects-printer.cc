@@ -688,9 +688,11 @@ void JSPromise::JSPromisePrint(std::ostream& os) {
 }
 
 void JSRegExp::JSRegExpPrint(std::ostream& os) {
+  Isolate* isolate = GetIsolate();
   JSObjectPrintHeader(os, *this, "JSRegExp");
   os << "\n - data: " << Brief(data());
   os << "\n - source: " << Brief(source());
+  os << "\n - flags: " << Brief(*JSRegExp::StringFromFlags(isolate, flags()));
   JSObjectPrintBody(os, *this);
 }
 
@@ -712,6 +714,8 @@ void Symbol::SymbolPrint(std::ostream& os) {
     os << " (" << PrivateSymbolToName() << ")";
   }
   os << "\n - private: " << is_private();
+  os << "\n - private_name: " << is_private_name();
+  os << "\n - private_brand: " << is_private_brand();
   os << "\n";
 }
 
@@ -1843,7 +1847,14 @@ void WasmContinuationObject::WasmContinuationObjectPrint(std::ostream& os) {
   PrintHeader(os, "WasmContinuationObject");
   os << "\n - parent: " << parent();
   os << "\n - jmpbuf: " << jmpbuf();
-  os << "\n - stack: " << stack();
+  os << "\n - managed_stack: " << managed_stack();
+  os << "\n - managed_jmpbuf: " << managed_jmpbuf();
+  os << "\n";
+}
+
+void WasmSuspenderObject::WasmSuspenderObjectPrint(std::ostream& os) {
+  PrintHeader(os, "WasmSuspenderObject");
+  os << "\n - continuation: " << continuation();
   os << "\n";
 }
 
@@ -1923,6 +1934,14 @@ void WasmJSFunctionData::WasmJSFunctionDataPrint(std::ostream& os) {
   os << "\n - serialized_return_count: " << serialized_return_count();
   os << "\n - serialized_parameter_count: " << serialized_parameter_count();
   os << "\n - serialized_signature: " << Brief(serialized_signature());
+  os << "\n";
+}
+
+void WasmApiFunctionRef::WasmApiFunctionRefPrint(std::ostream& os) {
+  PrintHeader(os, "WasmApiFunctionRef");
+  os << "\n - isolate_root: " << reinterpret_cast<void*>(isolate_root());
+  os << "\n - native_context: " << Brief(native_context());
+  os << "\n - callable: " << Brief(callable());
   os << "\n";
 }
 

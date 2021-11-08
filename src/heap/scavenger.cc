@@ -4,6 +4,7 @@
 
 #include "src/heap/scavenger.h"
 
+#include "src/handles/global-handles.h"
 #include "src/heap/array-buffer-sweeper.h"
 #include "src/heap/barrier.h"
 #include "src/heap/gc-tracer.h"
@@ -194,8 +195,8 @@ void ScavengerCollector::JobTask::Run(JobDelegate* delegate) {
   DCHECK_LT(delegate->GetTaskId(), scavengers_->size());
   Scavenger* scavenger = (*scavengers_)[delegate->GetTaskId()].get();
   if (delegate->IsJoiningThread()) {
-    TRACE_GC(outer_->heap_->tracer(),
-             GCTracer::Scope::SCAVENGER_SCAVENGE_PARALLEL);
+    // This is already traced in GCTracer::Scope::SCAVENGER_SCAVENGE_PARALLEL
+    // in ScavengerCollector::CollectGarbage.
     ProcessItems(delegate, scavenger);
   } else {
     TRACE_GC_EPOCH(outer_->heap_->tracer(),

@@ -1894,6 +1894,9 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ AtomicDecompressAnyTagged(i.OutputRegister(), i.InputRegister(0),
                                    i.InputRegister(1), i.TempRegister(0));
       break;
+    case kArm64LdrDecodeCagedPointer:
+      __ LoadCagedPointerField(i.OutputRegister(), i.MemoryOperand());
+      break;
     case kArm64Str:
       EmitOOLTrapIfNeeded(zone(), this, opcode, instr, __ pc_offset());
       __ Str(i.InputOrZeroRegister64(0), i.MemoryOperand(1));
@@ -1906,6 +1909,9 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       // the 3rd input register instead of the 1st.
       __ AtomicStoreTaggedField(i.InputRegister(2), i.InputRegister(0),
                                 i.InputRegister(1), i.TempRegister(0));
+      break;
+    case kArm64StrEncodeCagedPointer:
+      __ StoreCagedPointerField(i.InputOrZeroRegister64(0), i.MemoryOperand(1));
       break;
     case kArm64LdrS:
       EmitOOLTrapIfNeeded(zone(), this, opcode, instr, __ pc_offset());
@@ -3132,7 +3138,8 @@ void CodeGenerator::AssembleConstructFrame() {
         // {required_slots} to be odd.
         DCHECK_GE(required_slots, 1);
         __ Claim(required_slots - 1);
-      } break;
+        break;
+      }
 #if V8_ENABLE_WEBASSEMBLY
       case CallDescriptor::kCallWasmFunction: {
         UseScratchRegisterScope temps(tasm());
@@ -3141,16 +3148,11 @@ void CodeGenerator::AssembleConstructFrame() {
                StackFrame::TypeToMarker(info()->GetOutputStackFrameType()));
         __ Push(scratch, kWasmInstanceRegister);
         __ Claim(required_slots);
-      } break;
+        break;
+      }
       case CallDescriptor::kCallWasmImportWrapper:
       case CallDescriptor::kCallWasmCapiFunction: {
         UseScratchRegisterScope temps(tasm());
-        __ LoadTaggedPointerField(
-            kJSFunctionRegister,
-            FieldMemOperand(kWasmInstanceRegister, Tuple2::kValue2Offset));
-        __ LoadTaggedPointerField(
-            kWasmInstanceRegister,
-            FieldMemOperand(kWasmInstanceRegister, Tuple2::kValue1Offset));
         Register scratch = temps.AcquireX();
         __ Mov(scratch,
                StackFrame::TypeToMarker(info()->GetOutputStackFrameType()));
@@ -3160,7 +3162,8 @@ void CodeGenerator::AssembleConstructFrame() {
                 ? 0   // Import wrapper: none.
                 : 1;  // C-API function: PC.
         __ Claim(required_slots + extra_slots);
-      } break;
+        break;
+      }
 #endif  // V8_ENABLE_WEBASSEMBLY
       case CallDescriptor::kCallAddress:
 #if V8_ENABLE_WEBASSEMBLY

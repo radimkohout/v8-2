@@ -158,6 +158,8 @@ bool StringShape::IsIndirect() const {
   return (type_ & kIsIndirectStringMask) == kIsIndirectStringTag;
 }
 
+bool StringShape::IsDirect() const { return !IsIndirect(); }
+
 bool StringShape::IsExternal() const {
   return (type_ & kStringRepresentationMask) == kExternalStringTag;
 }
@@ -180,37 +182,37 @@ uint32_t StringShape::encoding_tag() const {
 }
 
 uint32_t StringShape::full_representation_tag() const {
-  return (type_ & (kStringRepresentationMask | kStringEncodingMask));
+  return (type_ & (kStringRepresentationAndEncodingMask));
 }
 
-STATIC_ASSERT((kStringRepresentationMask | kStringEncodingMask) ==
+STATIC_ASSERT((kStringRepresentationAndEncodingMask) ==
               Internals::kFullStringRepresentationMask);
 
 STATIC_ASSERT(static_cast<uint32_t>(kStringEncodingMask) ==
               Internals::kStringEncodingMask);
 
 bool StringShape::IsSequentialOneByte() const {
-  return full_representation_tag() == (kSeqStringTag | kOneByteStringTag);
+  return full_representation_tag() == kSeqOneByteStringTag;
 }
 
 bool StringShape::IsSequentialTwoByte() const {
-  return full_representation_tag() == (kSeqStringTag | kTwoByteStringTag);
+  return full_representation_tag() == kSeqTwoByteStringTag;
 }
 
 bool StringShape::IsExternalOneByte() const {
-  return full_representation_tag() == (kExternalStringTag | kOneByteStringTag);
+  return full_representation_tag() == kExternalOneByteStringTag;
 }
 
-STATIC_ASSERT((kExternalStringTag | kOneByteStringTag) ==
+STATIC_ASSERT(kExternalOneByteStringTag ==
               Internals::kExternalOneByteRepresentationTag);
 
 STATIC_ASSERT(v8::String::ONE_BYTE_ENCODING == kOneByteStringTag);
 
 bool StringShape::IsExternalTwoByte() const {
-  return full_representation_tag() == (kExternalStringTag | kTwoByteStringTag);
+  return full_representation_tag() == kExternalTwoByteStringTag;
 }
 
-STATIC_ASSERT((kExternalStringTag | kTwoByteStringTag) ==
+STATIC_ASSERT(kExternalTwoByteStringTag ==
               Internals::kExternalTwoByteRepresentationTag);
 
 STATIC_ASSERT(v8::String::TWO_BYTE_ENCODING == kTwoByteStringTag);
@@ -499,23 +501,23 @@ bool String::IsEqualToImpl(
   const Char* data = str.data();
   while (true) {
     int32_t type = string.map(cage_base).instance_type();
-    switch (type & (kStringRepresentationMask | kStringEncodingMask)) {
-      case kSeqStringTag | kOneByteStringTag:
+    switch (type & kStringRepresentationAndEncodingMask) {
+      case kSeqOneByteStringTag:
         return CompareCharsEqual(
             SeqOneByteString::cast(string).GetChars(no_gc, access_guard) +
                 slice_offset,
             data, len);
-      case kSeqStringTag | kTwoByteStringTag:
+      case kSeqTwoByteStringTag:
         return CompareCharsEqual(
             SeqTwoByteString::cast(string).GetChars(no_gc, access_guard) +
                 slice_offset,
             data, len);
-      case kExternalStringTag | kOneByteStringTag:
+      case kExternalOneByteStringTag:
         return CompareCharsEqual(
             ExternalOneByteString::cast(string).GetChars(cage_base) +
                 slice_offset,
             data, len);
-      case kExternalStringTag | kTwoByteStringTag:
+      case kExternalTwoByteStringTag:
         return CompareCharsEqual(
             ExternalTwoByteString::cast(string).GetChars(cage_base) +
                 slice_offset,
@@ -604,20 +606,31 @@ const Char* String::GetChars(
 
 Handle<String> String::Flatten(Isolate* isolate, Handle<String> string,
                                AllocationType allocation) {
-  if (string->IsConsString()) {
-    DCHECK(!string->InSharedHeap());
-    Handle<ConsString> cons = Handle<ConsString>::cast(string);
-    if (cons->IsFlat()) {
-      string = handle(cons->first(), isolate);
-    } else {
-      return SlowFlatten(isolate, cons, allocation);
+  DisallowGarbageCollection no_gc;  // Unhandlified code.
+  PtrComprCageBase cage_base(isolate);
+  String s = *string;
+  StringShape shape(s, cage_base);
+
+  // Shortcut already-flat strings.
+  if (V8_LIKELY(shape.IsDirect())) return string;
+
+  if (shape.IsCons()) {
+    DCHECK(!s.InSharedHeap());
+    ConsString cons = ConsString::cast(s);
+    if (!cons.IsFlat(isolate)) {
+      AllowGarbageCollection yes_gc;
+      return SlowFlatten(isolate, handle(cons, isolate), allocation);
     }
+    s = cons.first(cage_base);
+    shape = StringShape(s, cage_base);
   }
-  if (string->IsThinString()) {
-    string = handle(Handle<ThinString>::cast(string)->actual(), isolate);
-    DCHECK(!string->IsConsString());
+
+  if (shape.IsThin()) {
+    s = ThinString::cast(s).actual(cage_base);
+    DCHECK(!s.IsConsString());
   }
-  return string;
+
+  return handle(s, isolate);
 }
 
 Handle<String> String::Flatten(LocalIsolate* isolate, Handle<String> string,
@@ -625,6 +638,62 @@ Handle<String> String::Flatten(LocalIsolate* isolate, Handle<String> string,
   // We should never pass non-flat strings to String::Flatten when off-thread.
   DCHECK(string->IsFlat());
   return string;
+}
+
+// static
+base::Optional<String::FlatContent> String::TryGetFlatContentFromDirectString(
+    PtrComprCageBase cage_base, const DisallowGarbageCollection& no_gc,
+    String string, int offset, int length,
+    const SharedStringAccessGuardIfNeeded& access_guard) {
+  DCHECK_GE(offset, 0);
+  DCHECK_GE(length, 0);
+  DCHECK_LE(offset + length, string.length());
+  switch (StringShape{string, cage_base}.full_representation_tag()) {
+    case kSeqOneByteStringTag:
+      return FlatContent(
+          SeqOneByteString::cast(string).GetChars(no_gc, access_guard) + offset,
+          length, no_gc);
+    case kSeqTwoByteStringTag:
+      return FlatContent(
+          SeqTwoByteString::cast(string).GetChars(no_gc, access_guard) + offset,
+          length, no_gc);
+    case kExternalOneByteStringTag:
+      return FlatContent(
+          ExternalOneByteString::cast(string).GetChars(cage_base) + offset,
+          length, no_gc);
+    case kExternalTwoByteStringTag:
+      return FlatContent(
+          ExternalTwoByteString::cast(string).GetChars(cage_base) + offset,
+          length, no_gc);
+    default:
+      return {};
+  }
+  UNREACHABLE();
+}
+
+String::FlatContent String::GetFlatContent(
+    const DisallowGarbageCollection& no_gc) {
+#if DEBUG
+  // Check that this method is called only from the main thread.
+  {
+    Isolate* isolate;
+    // We don't have to check read only strings as those won't move.
+    DCHECK_IMPLIES(GetIsolateFromHeapObject(*this, &isolate),
+                   ThreadId::Current() == isolate->thread_id());
+  }
+#endif
+
+  return GetFlatContent(no_gc, SharedStringAccessGuardIfNeeded::NotNeeded());
+}
+
+String::FlatContent String::GetFlatContent(
+    const DisallowGarbageCollection& no_gc,
+    const SharedStringAccessGuardIfNeeded& access_guard) {
+  PtrComprCageBase cage_base = GetPtrComprCageBase(*this);
+  base::Optional<FlatContent> flat_content = TryGetFlatContentFromDirectString(
+      cage_base, no_gc, *this, 0, length(), access_guard);
+  if (flat_content.has_value()) return flat_content.value();
+  return SlowGetFlatContent(no_gc, access_guard);
 }
 
 uint16_t String::Get(int index) const {
@@ -680,7 +749,7 @@ void String::Set(int index, uint16_t value) {
   DCHECK(index >= 0 && index < length());
   DCHECK(StringShape(*this).IsSequential());
 
-  return this->IsOneByteRepresentation()
+  return IsOneByteRepresentation()
              ? SeqOneByteString::cast(*this).SeqOneByteStringSet(index, value)
              : SeqTwoByteString::cast(*this).SeqTwoByteStringSet(index, value);
 }
@@ -689,13 +758,13 @@ bool String::IsFlat() const { return IsFlat(GetPtrComprCageBase(*this)); }
 
 bool String::IsFlat(PtrComprCageBase cage_base) const {
   if (!StringShape(*this, cage_base).IsCons()) return true;
-  return ConsString::cast(*this).second(cage_base).length() == 0;
+  return ConsString::cast(*this).IsFlat(cage_base);
 }
 
 String String::GetUnderlying() const {
   // Giving direct access to underlying string only makes sense if the
   // wrapping string is already flattened.
-  DCHECK(this->IsFlat());
+  DCHECK(IsFlat());
   DCHECK(StringShape(*this).IsIndirect());
   STATIC_ASSERT(static_cast<int>(ConsString::kFirstOffset) ==
                 static_cast<int>(SlicedString::kParentOffset));
@@ -725,28 +794,28 @@ ConsString String::VisitFlat(
   while (true) {
     int32_t tag = StringShape(string, cage_base).full_representation_tag();
     switch (tag) {
-      case kSeqStringTag | kOneByteStringTag:
+      case kSeqOneByteStringTag:
         visitor->VisitOneByteString(
             SeqOneByteString::cast(string).GetChars(no_gc, access_guard) +
                 slice_offset,
             length - offset);
         return ConsString();
 
-      case kSeqStringTag | kTwoByteStringTag:
+      case kSeqTwoByteStringTag:
         visitor->VisitTwoByteString(
             SeqTwoByteString::cast(string).GetChars(no_gc, access_guard) +
                 slice_offset,
             length - offset);
         return ConsString();
 
-      case kExternalStringTag | kOneByteStringTag:
+      case kExternalOneByteStringTag:
         visitor->VisitOneByteString(
             ExternalOneByteString::cast(string).GetChars(cage_base) +
                 slice_offset,
             length - offset);
         return ConsString();
 
-      case kExternalStringTag | kTwoByteStringTag:
+      case kExternalTwoByteStringTag:
         visitor->VisitTwoByteString(
             ExternalTwoByteString::cast(string).GetChars(cage_base) +
                 slice_offset,
@@ -876,12 +945,16 @@ void SlicedString::set_parent(String parent, WriteBarrierMode mode) {
   TorqueGeneratedSlicedString<SlicedString, Super>::set_parent(parent, mode);
 }
 
-Object ConsString::unchecked_first() {
+Object ConsString::unchecked_first() const {
   return TaggedField<Object, kFirstOffset>::load(*this);
 }
 
-Object ConsString::unchecked_second() {
+Object ConsString::unchecked_second() const {
   return RELAXED_READ_FIELD(*this, kSecondOffset);
+}
+
+bool ConsString::IsFlat(PtrComprCageBase cage_base) const {
+  return second(cage_base).length() == 0;
 }
 
 DEF_GETTER(ThinString, unchecked_actual, HeapObject) {

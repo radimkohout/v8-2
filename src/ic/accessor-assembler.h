@@ -229,6 +229,7 @@ class V8_EXPORT_PRIVATE AccessorAssembler : public CodeStubAssembler {
 
     bool IsStoreOwn() const { return mode_ == StoreICMode::kStoreOwn; }
     bool IsDefineOwn() const { return mode_ == StoreICMode::kDefineOwn; }
+    bool IsAnyStoreOwn() const { return IsStoreOwn() || IsDefineOwn(); }
 
    private:
     TNode<Context> context_;
@@ -247,6 +248,7 @@ class V8_EXPORT_PRIVATE AccessorAssembler : public CodeStubAssembler {
       const StoreICParameters* p, TNode<MaybeObject> handler, Label* miss,
       ICMode ic_mode, ElementSupport support_elements = kOnlyProperties);
   enum StoreTransitionMapFlags {
+    kDontCheckPrototypeValidity = 0,
     kCheckPrototypeValidity = 1 << 0,
     kValidateTransitionHandler = 1 << 1,
     kStoreTransitionMapFlagsMask =
@@ -466,7 +468,7 @@ class V8_EXPORT_PRIVATE AccessorAssembler : public CodeStubAssembler {
 
   // Low-level helpers.
 
-  using OnCodeHandler = std::function<void(TNode<Code> code_handler)>;
+  using OnCodeHandler = std::function<void(TNode<CodeT> code_handler)>;
   using OnFoundOnLookupStartObject = std::function<void(
       TNode<PropertyDictionary> properties, TNode<IntPtrT> name_index)>;
 

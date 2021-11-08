@@ -95,6 +95,7 @@ class HandleScopeImplementer;
 class HeapObjectToIndexHashMap;
 class HeapProfiler;
 class GlobalHandles;
+class GlobalSafepoint;
 class InnerPointerToCodeCache;
 class LazyCompileDispatcher;
 class LocalIsolate;
@@ -604,6 +605,8 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
     return isolate;
   }
 
+  bool IsCurrent() const { return this == TryGetCurrent(); }
+
   // Usually called by Init(), but can be called early e.g. to allow
   // testing components that require logging but not the whole
   // isolate.
@@ -1085,7 +1088,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   // address of the cage where the code space is allocated. Otherwise, it
   // defaults to cage_base().
   Address code_cage_base() const {
-#if V8_EXTERNAL_CODE_SPACE
+#ifdef V8_EXTERNAL_CODE_SPACE
     return code_cage_base_;
 #else
     return cage_base();
@@ -1141,6 +1144,12 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
 
   Address* builtin_entry_table() { return isolate_data_.builtin_entry_table(); }
   V8_INLINE Address* builtin_table() { return isolate_data_.builtin_table(); }
+  V8_INLINE Address* builtin_tier0_table() {
+    return isolate_data_.builtin_tier0_table();
+  }
+  V8_INLINE Address* builtin_code_data_container_table() {
+    return isolate_data_.builtin_code_data_container_table();
+  }
 
   bool IsBuiltinTableHandleLocation(Address* handle_location);
 
@@ -1671,7 +1680,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   AccountingAllocator* allocator() { return allocator_; }
 
   LazyCompileDispatcher* lazy_compile_dispatcher() const {
-    return compiler_dispatcher_;
+    return lazy_compile_dispatcher_.get();
   }
 
   baseline::BaselineBatchCompiler* baseline_batch_compiler() const {
@@ -1684,6 +1693,8 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
 
   void SetHostImportModuleDynamicallyCallback(
       HostImportModuleDynamicallyWithImportAssertionsCallback callback);
+  void SetHostImportModuleDynamicallyCallback(
+      HostImportModuleDynamicallyCallback callback);
   MaybeHandle<JSPromise> RunHostImportModuleDynamicallyCallback(
       Handle<Script> referrer, Handle<Object> specifier,
       MaybeHandle<Object> maybe_import_assertions_argument);
@@ -1852,17 +1863,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
     shared_isolate_ = shared_isolate;
   }
 
-  bool HasClientIsolates() const { return client_isolate_head_; }
-
-  template <typename Callback>
-  void IterateClientIsolates(Callback callback) {
-    for (Isolate* current = client_isolate_head_; current;
-         current = current->next_client_isolate_) {
-      callback(current);
-    }
-  }
-
-  base::Mutex* client_isolate_mutex() { return &client_isolate_mutex_; }
+  GlobalSafepoint* global_safepoint() const { return global_safepoint_.get(); }
 
   bool OwnsStringTable() { return !FLAG_shared_string_table || is_shared(); }
 
@@ -1992,10 +1993,6 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   void AttachToSharedIsolate();
   void DetachFromSharedIsolate();
 
-  // Methods for appending and removing to/from client isolates list.
-  void AppendAsClientIsolate(Isolate* client);
-  void RemoveAsClientIsolate(Isolate* client);
-
   // This class contains a collection of data accessible from both C++ runtime
   // and compiled code (including assembly stubs, builtins, interpreter bytecode
   // handlers and optimized code).
@@ -2068,6 +2065,8 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   v8::Isolate::AtomicsWaitCallback atomics_wait_callback_ = nullptr;
   void* atomics_wait_callback_data_ = nullptr;
   PromiseHook promise_hook_ = nullptr;
+  HostImportModuleDynamicallyCallback host_import_module_dynamically_callback_ =
+      nullptr;
   HostImportModuleDynamicallyWithImportAssertionsCallback
       host_import_module_dynamically_with_import_assertions_callback_ = nullptr;
   std::atomic<debug::CoverageMode> code_coverage_mode_{
@@ -2128,7 +2127,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   // favor memory over runtime performance.
   bool memory_savings_mode_active_ = false;
 
-#if V8_EXTERNAL_CODE_SPACE
+#ifdef V8_EXTERNAL_CODE_SPACE
   // Base address of the pointer compression cage containing external code
   // space, when external code space is enabled.
   Address code_cage_base_ = 0;
@@ -2156,7 +2155,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   // through all compilations (and thus all JSHeapBroker instances).
   Zone* compiler_zone_ = nullptr;
 
-  LazyCompileDispatcher* compiler_dispatcher_ = nullptr;
+  std::unique_ptr<LazyCompileDispatcher> lazy_compile_dispatcher_;
   baseline::BaselineBatchCompiler* baseline_batch_compiler_ = nullptr;
 
   using InterruptEntry = std::pair<InterruptCallback, void*>;
@@ -2300,21 +2299,20 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   bool attached_to_shared_isolate_ = false;
 #endif  // DEBUG
 
-  // A shared isolate will use these two fields to track all its client
-  // isolates.
-  base::Mutex client_isolate_mutex_;
-  Isolate* client_isolate_head_ = nullptr;
-
-  // Used to form a linked list of all client isolates. Protected by
-  // client_isolate_mutex_.
-  Isolate* prev_client_isolate_ = nullptr;
-  Isolate* next_client_isolate_ = nullptr;
+  // Used to track and safepoint all client isolates attached to this shared
+  // isolate.
+  std::unique_ptr<GlobalSafepoint> global_safepoint_;
+  // Client isolates list managed by GlobalSafepoint.
+  Isolate* global_safepoint_prev_client_isolate_ = nullptr;
+  Isolate* global_safepoint_next_client_isolate_ = nullptr;
 
   // A signal-safe vector of heap pages containing code. Used with the
   // v8::Unwinder API.
   std::atomic<std::vector<MemoryRange>*> code_pages_{nullptr};
   std::vector<MemoryRange> code_pages_buffer1_;
   std::vector<MemoryRange> code_pages_buffer2_;
+  // The mutex only guards adding pages, the retrieval is signal safe.
+  base::Mutex code_pages_mutex_;
 
   // Enables the host application to provide a mechanism for recording a
   // predefined set of data as crash keys to be used in postmortem debugging
@@ -2326,6 +2324,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   void* operator new(size_t, void* ptr) { return ptr; }
 
   friend class heap::HeapTester;
+  friend class GlobalSafepoint;
   friend class TestSerializer;
 };
 

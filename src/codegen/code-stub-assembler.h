@@ -1042,6 +1042,33 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   // Works only with V8_ENABLE_FORCE_SLOW_PATH compile time flag. Nop otherwise.
   void GotoIfForceSlowPath(Label* if_true);
 
+#ifdef V8_CAGED_POINTERS
+
+  //
+  // Caged pointer related functionality.
+  //
+
+  // Load a caged pointer value from an object.
+  TNode<CagedPtrT> LoadCagedPointerFromObject(TNode<HeapObject> object,
+                                              int offset) {
+    return LoadCagedPointerFromObject(object, IntPtrConstant(offset));
+  }
+
+  TNode<CagedPtrT> LoadCagedPointerFromObject(TNode<HeapObject> object,
+                                              TNode<IntPtrT> offset);
+
+  // Stored a caged pointer value to an object.
+  void StoreCagedPointerToObject(TNode<HeapObject> object, int offset,
+                                 TNode<CagedPtrT> pointer) {
+    StoreCagedPointerToObject(object, IntPtrConstant(offset), pointer);
+  }
+
+  void StoreCagedPointerToObject(TNode<HeapObject> object,
+                                 TNode<IntPtrT> offset,
+                                 TNode<CagedPtrT> pointer);
+
+#endif  // V8_CAGED_POINTERS
+
   //
   // ExternalPointerT-related functionality.
   //
@@ -3602,7 +3629,7 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
                                 ElementsKind kind = HOLEY_ELEMENTS);
 
   // Load a builtin's code from the builtin array in the isolate.
-  TNode<Code> LoadBuiltin(TNode<Smi> builtin_id);
+  TNode<CodeT> LoadBuiltin(TNode<Smi> builtin_id);
 
   // Figure out the SFI's code object using its data field.
   // If |data_type_out| is provided, the instance type of the function data will
@@ -3610,7 +3637,7 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   // data_type_out will be set to 0.
   // If |if_compile_lazy| is provided then the execution will go to the given
   // label in case of an CompileLazy code object.
-  TNode<Code> GetSharedFunctionInfoCode(
+  TNode<CodeT> GetSharedFunctionInfoCode(
       TNode<SharedFunctionInfo> shared_info,
       TVariable<Uint16T>* data_type_out = nullptr,
       Label* if_compile_lazy = nullptr);

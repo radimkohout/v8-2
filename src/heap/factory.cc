@@ -1445,11 +1445,15 @@ Handle<Foreign> Factory::NewForeign(Address addr) {
 Handle<WasmTypeInfo> Factory::NewWasmTypeInfo(
     Address type_address, Handle<Map> opt_parent, int instance_size_bytes,
     Handle<WasmInstanceObject> instance) {
-  // We pretenure WasmTypeInfo objects because they are refererenced by Maps,
-  // which are assumed to be long-lived. The supertypes list is constant
-  // after initialization, so we pretenure that too.
-  // The subtypes list, however, is expected to grow (and hence be replaced),
-  // so we don't pretenure it.
+  // We pretenure WasmTypeInfo objects for two reasons:
+  // (1) They are referenced by Maps, which are assumed to be long-lived,
+  //     so pretenuring the WTI is a bit more efficient.
+  // (2) The object visitors need to read the WasmTypeInfo to find tagged
+  //     fields in Wasm structs; in the middle of a GC cycle that's only
+  //     safe to do if the WTI is in old space.
+  // The supertypes list is constant after initialization, so we pretenure
+  // that too. The subtypes list, however, is expected to grow (and hence be
+  // replaced), so we don't pretenure it.
   Handle<ArrayList> subtypes = ArrayList::New(isolate(), 0);
   Handle<FixedArray> supertypes;
   if (opt_parent.is_null()) {
@@ -1473,11 +1477,27 @@ Handle<WasmTypeInfo> Factory::NewWasmTypeInfo(
   return handle(result, isolate());
 }
 
+Handle<WasmApiFunctionRef> Factory::NewWasmApiFunctionRef(
+    Handle<JSReceiver> callable) {
+  Map map = *wasm_api_function_ref_map();
+  auto result = WasmApiFunctionRef::cast(AllocateRawWithImmortalMap(
+      map.instance_size(), AllocationType::kOld, map));
+  DisallowGarbageCollection no_gc;
+  result.set_isolate_root(isolate()->isolate_root());
+  result.set_native_context(*isolate()->native_context());
+  if (!callable.is_null()) {
+    result.set_callable(*callable);
+  } else {
+    result.set_callable(*undefined_value());
+  }
+  return handle(result, isolate());
+}
+
 Handle<WasmJSFunctionData> Factory::NewWasmJSFunctionData(
     Address opt_call_target, Handle<JSReceiver> callable, int return_count,
     int parameter_count, Handle<PodArray<wasm::ValueType>> serialized_sig,
     Handle<Code> wrapper_code) {
-  Handle<Tuple2> pair = NewTuple2(null_value(), callable, AllocationType::kOld);
+  Handle<WasmApiFunctionRef> ref = NewWasmApiFunctionRef(callable);
   Map map = *wasm_js_function_data_map();
   WasmJSFunctionData result =
       WasmJSFunctionData::cast(AllocateRawWithImmortalMap(
@@ -1485,14 +1505,14 @@ Handle<WasmJSFunctionData> Factory::NewWasmJSFunctionData(
   DisallowGarbageCollection no_gc;
   result.AllocateExternalPointerEntries(isolate());
   result.set_foreign_address(isolate(), opt_call_target);
-  result.set_ref(*pair);
+  result.set_ref(*ref);
   result.set_wrapper_code(*wrapper_code);
   result.set_serialized_return_count(return_count);
   result.set_serialized_parameter_count(parameter_count);
   result.set_serialized_signature(*serialized_sig);
   // Default value, will be overwritten by the caller.
   result.set_wasm_to_js_wrapper_code(
-      isolate()->heap()->builtin(Builtin::kAbort));
+      isolate()->builtins()->code(Builtin::kAbort));
   return handle(result, isolate());
 }
 
@@ -1508,6 +1528,7 @@ Handle<WasmExportedFunctionData> Factory::NewWasmExportedFunctionData(
   DisallowGarbageCollection no_gc;
   result.AllocateExternalPointerEntries(isolate());
   result.set_foreign_address(isolate(), call_target);
+  DCHECK(ref->IsWasmInstanceObject() || ref->IsWasmApiFunctionRef());
   result.set_ref(*ref);
   result.set_wrapper_code(*export_wrapper);
   result.set_instance(*instance);
@@ -1524,8 +1545,7 @@ Handle<WasmCapiFunctionData> Factory::NewWasmCapiFunctionData(
     Address call_target, Handle<Foreign> embedder_data,
     Handle<Code> wrapper_code,
     Handle<PodArray<wasm::ValueType>> serialized_sig) {
-  Handle<Tuple2> pair =
-      NewTuple2(null_value(), null_value(), AllocationType::kOld);
+  Handle<WasmApiFunctionRef> ref = NewWasmApiFunctionRef(Handle<JSReceiver>());
   Map map = *wasm_capi_function_data_map();
   WasmCapiFunctionData result =
       WasmCapiFunctionData::cast(AllocateRawWithImmortalMap(
@@ -1533,7 +1553,7 @@ Handle<WasmCapiFunctionData> Factory::NewWasmCapiFunctionData(
   DisallowGarbageCollection no_gc;
   result.AllocateExternalPointerEntries(isolate());
   result.set_foreign_address(isolate(), call_target);
-  result.set_ref(*pair);
+  result.set_ref(*ref);
   result.set_wrapper_code(*wrapper_code);
   result.set_embedder_data(*embedder_data);
   result.set_serialized_signature(*serialized_sig);
@@ -2286,13 +2306,17 @@ Handle<JSObject> Factory::NewJSObject(Handle<JSFunction> constructor,
   return NewJSObjectFromMap(map, allocation);
 }
 
-Handle<JSObject> Factory::NewJSObjectWithNullProto() {
-  Handle<JSObject> result = NewJSObject(isolate()->object_function());
-  Handle<Map> new_map = Map::Copy(
-      isolate(), Handle<Map>(result->map(), isolate()), "ObjectWithNullProto");
-  Map::SetPrototype(isolate(), new_map, null_value());
-  JSObject::MigrateToMap(isolate(), result, new_map);
+Handle<JSObject> Factory::NewSlowJSObjectWithNullProto() {
+  Handle<JSObject> result =
+      NewSlowJSObjectFromMap(isolate()->slow_object_with_null_prototype_map());
   return result;
+}
+
+Handle<JSObject> Factory::NewJSObjectWithNullProto() {
+  Handle<Map> map(isolate()->object_function()->initial_map(), isolate());
+  Handle<Map> map_with_null_proto =
+      Map::TransitionToPrototype(isolate(), map, null_value());
+  return NewJSObjectFromMap(map_with_null_proto);
 }
 
 Handle<JSGlobalObject> Factory::NewJSGlobalObject(
@@ -3119,10 +3143,17 @@ Handle<String> Factory::HeapNumberToString(Handle<HeapNumber> number,
     if (!cached->IsUndefined(isolate())) return Handle<String>::cast(cached);
   }
 
-  char arr[kNumberToStringBufferSize];
-  base::Vector<char> buffer(arr, arraysize(arr));
-  const char* string = DoubleToCString(value, buffer);
-  Handle<String> result = CharToString(this, string, mode);
+  Handle<String> result;
+  if (value == 0) {
+    result = zero_string();
+  } else if (std::isnan(value)) {
+    result = NaN_string();
+  } else {
+    char arr[kNumberToStringBufferSize];
+    base::Vector<char> buffer(arr, arraysize(arr));
+    const char* string = DoubleToCString(value, buffer);
+    result = CharToString(this, string, mode);
+  }
   if (mode != NumberCacheMode::kIgnore) {
     NumberToStringCacheSet(number, hash, result);
   }
@@ -3136,10 +3167,15 @@ inline Handle<String> Factory::SmiToString(Smi number, NumberCacheMode mode) {
     if (!cached->IsUndefined(isolate())) return Handle<String>::cast(cached);
   }
 
-  char arr[kNumberToStringBufferSize];
-  base::Vector<char> buffer(arr, arraysize(arr));
-  const char* string = IntToCString(number.value(), buffer);
-  Handle<String> result = CharToString(this, string, mode);
+  Handle<String> result;
+  if (number == Smi::zero()) {
+    result = zero_string();
+  } else {
+    char arr[kNumberToStringBufferSize];
+    base::Vector<char> buffer(arr, arraysize(arr));
+    const char* string = IntToCString(number.value(), buffer);
+    result = CharToString(this, string, mode);
+  }
   if (mode != NumberCacheMode::kIgnore) {
     NumberToStringCacheSet(handle(number, isolate()), hash, result);
   }
@@ -3729,7 +3765,7 @@ Handle<JSFunction> Factory::JSFunctionBuilder::Build() {
   PrepareMap();
   PrepareFeedbackCell();
 
-  Handle<Code> code = handle(sfi_->GetCode(), isolate_);
+  Handle<Code> code = handle(FromCodeT(sfi_->GetCode()), isolate_);
   Handle<JSFunction> result = BuildRaw(code);
 
   if (code->kind() == CodeKind::BASELINE) {

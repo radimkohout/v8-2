@@ -75,7 +75,7 @@ static void GenerateTailCallToReturnedCode(MacroAssembler* masm,
   }
 
   static_assert(kJavaScriptCallCodeStartRegister == x2, "ABI mismatch");
-  __ JumpCodeObject(x2);
+  __ JumpCodeTObject(x2);
 }
 
 namespace {
@@ -1891,10 +1891,12 @@ static void Generate_InterpreterEnterBytecode(MacroAssembler* masm) {
   __ Ldr(kJavaScriptCallCodeStartRegister,
          MemOperand(kInterpreterDispatchTableRegister, x1));
 
-  UseScratchRegisterScope temps(masm);
-  temps.Exclude(x17);
-  __ Mov(x17, kJavaScriptCallCodeStartRegister);
-  __ Jump(x17);
+  {
+    UseScratchRegisterScope temps(masm);
+    temps.Exclude(x17);
+    __ Mov(x17, kJavaScriptCallCodeStartRegister);
+    __ Jump(x17);
+  }
 
   __ Bind(&return_from_bytecode_dispatch);
 
@@ -1932,8 +1934,12 @@ static void Generate_InterpreterEnterBytecode(MacroAssembler* masm) {
 
   __ Bind(&trampoline_loaded);
 
-  __ Add(x17, x1, Operand(interpreter_entry_return_pc_offset.value()));
-  __ Br(x17);
+  {
+    UseScratchRegisterScope temps(masm);
+    temps.Exclude(x17);
+    __ Add(x17, x1, Operand(interpreter_entry_return_pc_offset.value()));
+    __ Br(x17);
+  }
 }
 
 void Builtins::Generate_InterpreterEnterAtNextBytecode(MacroAssembler* masm) {
@@ -3172,6 +3178,11 @@ void Builtins::Generate_WasmDebugBreak(MacroAssembler* masm) {
 
 void Builtins::Generate_GenericJSToWasmWrapper(MacroAssembler* masm) {
   // TODO(v8:10701): Implement for this platform.
+  __ Trap();
+}
+
+void Builtins::Generate_WasmReturnPromiseOnSuspend(MacroAssembler* masm) {
+  // TODO(v8:12191): Implement for this platform.
   __ Trap();
 }
 

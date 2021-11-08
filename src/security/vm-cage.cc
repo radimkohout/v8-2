@@ -308,10 +308,12 @@ bool V8VirtualMemoryCage::Initialize(v8::PageAllocator* page_allocator,
     // PA anyway uses MAP_JIT for V8 mappings. Further, we want to eventually
     // move JIT pages out of the cage, at which point we'd like to forbid
     // making pages inside the cage executable, and so don't want MAP_JIT.
-    void* hint = page_allocator->GetRandomMmapAddr();
+    Address hint = RoundDown(
+        reinterpret_cast<Address>(page_allocator->GetRandomMmapAddr()),
+        kVirtualMemoryCageAlignment);
     reservation_base_ = reinterpret_cast<Address>(page_allocator->AllocatePages(
-        hint, reservation_size, kVirtualMemoryCageAlignment,
-        PageAllocator::kNoAccess));
+        reinterpret_cast<void*>(hint), reservation_size,
+        kVirtualMemoryCageAlignment, PageAllocator::kNoAccess));
     if (!reservation_base_) {
       size /= 2;
     }
@@ -326,6 +328,7 @@ bool V8VirtualMemoryCage::Initialize(v8::PageAllocator* page_allocator,
 
   page_allocator_ = page_allocator;
   size_ = size;
+  end_ = base_ + size_;
   reservation_size_ = reservation_size;
 
   cage_page_allocator_ = std::make_unique<base::BoundedPageAllocator>(
@@ -389,6 +392,7 @@ bool V8VirtualMemoryCage::InitializeAsFakeCage(
 
   base_ = reservation_base_;
   size_ = size;
+  end_ = base_ + size_;
   reservation_size_ = size_to_reserve;
   initialized_ = true;
   is_fake_cage_ = true;
@@ -405,6 +409,7 @@ void V8VirtualMemoryCage::TearDown() {
     CHECK(page_allocator_->FreePages(reinterpret_cast<void*>(reservation_base_),
                                      reservation_size_));
     base_ = kNullAddress;
+    end_ = kNullAddress;
     size_ = 0;
     reservation_base_ = kNullAddress;
     reservation_size_ = 0;

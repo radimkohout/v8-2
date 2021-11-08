@@ -2372,6 +2372,8 @@ int JSObject::GetHeaderSize(InstanceType type,
       return WasmMemoryObject::kHeaderSize;
     case WASM_MODULE_OBJECT_TYPE:
       return WasmModuleObject::kHeaderSize;
+    case WASM_SUSPENDER_OBJECT_TYPE:
+      return WasmSuspenderObject::kHeaderSize;
     case WASM_TABLE_OBJECT_TYPE:
       return WasmTableObject::kHeaderSize;
     case WASM_VALUE_OBJECT_TYPE:
@@ -2579,6 +2581,20 @@ void JSObject::SetNormalizedProperty(Handle<JSObject> object, Handle<Name> name,
       }
     }
   }
+}
+
+void JSObject::SetNormalizedElement(Handle<JSObject> object, uint32_t index,
+                                    Handle<Object> value,
+                                    PropertyDetails details) {
+  DCHECK_EQ(object->GetElementsKind(), DICTIONARY_ELEMENTS);
+
+  Isolate* isolate = object->GetIsolate();
+
+  Handle<NumberDictionary> dictionary =
+      handle(NumberDictionary::cast(object->elements()), isolate);
+  dictionary =
+      NumberDictionary::Set(isolate, dictionary, index, value, object, details);
+  object->set_elements(*dictionary);
 }
 
 void JSObject::JSObjectShortPrint(StringStream* accumulator) {

@@ -56,6 +56,7 @@
 #include "src/handles/persistent-handles.h"
 #include "src/heap/heap-inl.h"
 #include "src/heap/read-only-heap.h"
+#include "src/heap/safepoint.h"
 #include "src/ic/stub-cache.h"
 #include "src/init/bootstrapper.h"
 #include "src/init/setup-isolate.h"
@@ -393,7 +394,7 @@ size_t Isolate::HashIsolateForEmbeddedBlob() {
   // Hash data sections of builtin code objects.
   for (Builtin builtin = Builtins::kFirst; builtin <= Builtins::kLast;
        ++builtin) {
-    Code code = heap_.builtin(builtin);
+    Code code = builtins()->code(builtin);
 
     DCHECK(Internals::HasHeapObjectTag(code.ptr()));
     uint8_t* const code_ptr =
@@ -3016,6 +3017,56 @@ v8::PageAllocator* Isolate::page_allocator() const {
   return isolate_allocator_->page_allocator();
 }
 
+namespace {
+
+// These flags are all related to --jitless and *must not change within the
+// same process*. See also: crbug.com/v8/9019.
+enum class CheckedFlag {
+  kInitialized = 1 << 0,  // Whether initial_checked_flag_values_ has been set.
+  kJitless = 1 << 1,
+  kRegexpInterpretAll = 1 << 2,
+  kExposeWasm = 1 << 3,
+  kOpt = 1 << 4,
+};
+using CheckedFlags = base::Flags<CheckedFlag>;
+DEFINE_OPERATORS_FOR_FLAGS(CheckedFlags)
+
+// The first isolate sets these, all following isolates read and verify against
+// initial values.
+std::atomic<uint32_t> initial_checked_flag_values_;
+
+void VerifyCheckedFlags() {
+  // TODO(all): While jitless flags are especially sensitive and cause
+  // hard-to-debug failures if misused, it may be good to check all V8 flags in
+  // a similar fashion - or at least have a systematic way of defining flags
+  // that must not change. For now, this ad-hoc check for jitless-related flags
+  // is intended to avoid trivial and accidental misuses.
+  CheckedFlags current = CheckedFlag::kInitialized;
+  if (FLAG_jitless) current |= CheckedFlag::kJitless;
+  if (FLAG_regexp_interpret_all) current |= CheckedFlag::kRegexpInterpretAll;
+#if V8_ENABLE_WEBASSEMBLY
+  if (FLAG_expose_wasm) current |= CheckedFlag::kExposeWasm;
+#endif
+  if (FLAG_opt) current |= CheckedFlag::kOpt;
+
+  uint32_t initial_flags = 0;
+  const bool is_initial_isolate =
+      initial_checked_flag_values_.compare_exchange_strong(
+          initial_flags, static_cast<uint32_t>(current),
+          std::memory_order_relaxed, std::memory_order_relaxed);
+
+  if (is_initial_isolate) return;  // Nothing to check.
+
+  if (static_cast<uint32_t>(current) != initial_flags) {
+    FATAL(
+        "An Isolate was spawned with different flag values than another "
+        "Isolate in the same process. Flags must remain unchanged within one "
+        "process.");
+  }
+}
+
+}  // namespace
+
 Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator,
                  bool is_shared)
     : isolate_data_(this, isolate_allocator->GetPtrComprCageBase()),
@@ -3040,6 +3091,8 @@ Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator,
       cancelable_task_manager_(new CancelableTaskManager()) {
   TRACE_ISOLATE(constructor);
   CheckIsolateLayout();
+
+  VerifyCheckedFlags();
 
   // ThreadManager is initialized early to support locking an isolate
   // before it is entered.
@@ -3075,6 +3128,10 @@ Isolate::Isolate(std::unique_ptr<i::IsolateAllocator> isolate_allocator,
   InitializeDefaultEmbeddedBlob();
 
   MicrotaskQueue::SetUpDefaultMicrotaskQueue(this);
+
+  if (is_shared_) {
+    global_safepoint_ = std::make_unique<GlobalSafepoint>(this);
+  }
 }
 
 void Isolate::CheckIsolateLayout() {
@@ -3165,7 +3222,7 @@ void Isolate::Deinit() {
   }
 
   // All client isolates should already be detached.
-  DCHECK_NULL(client_isolate_head_);
+  if (is_shared()) global_safepoint()->AssertNoClients();
 
   if (FLAG_print_deopt_stress) {
     PrintF(stdout, "=== Stress deopt counter: %u\n", stress_deopt_count_);
@@ -3201,9 +3258,10 @@ void Isolate::Deinit() {
   delete heap_profiler_;
   heap_profiler_ = nullptr;
 
-  compiler_dispatcher_->AbortAll();
-  delete compiler_dispatcher_;
-  compiler_dispatcher_ = nullptr;
+  if (lazy_compile_dispatcher_) {
+    lazy_compile_dispatcher_->AbortAll();
+    lazy_compile_dispatcher_.reset();
+  }
 
   delete baseline_batch_compiler_;
   baseline_batch_compiler_ = nullptr;
@@ -3425,6 +3483,9 @@ void CreateOffHeapTrampolines(Isolate* isolate) {
     // From this point onwards, the old builtin code object is unreachable and
     // will be collected by the next GC.
     builtins->set_code(builtin, *trampoline);
+    if (V8_EXTERNAL_CODE_SPACE_BOOL) {
+      builtins->set_codet(builtin, ToCodeT(*trampoline));
+    }
   }
 }
 
@@ -3667,8 +3728,10 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
   interpreter_ = new interpreter::Interpreter(this);
   bigint_processor_ = bigint::Processor::New(new BigIntPlatform(this));
 
-  compiler_dispatcher_ = new LazyCompileDispatcher(
-      this, V8::GetCurrentPlatform(), FLAG_stack_size);
+  if (FLAG_lazy_compile_dispatcher) {
+    lazy_compile_dispatcher_ = std::make_unique<LazyCompileDispatcher>(
+        this, V8::GetCurrentPlatform(), FLAG_stack_size);
+  }
   baseline_batch_compiler_ = new baseline::BaselineBatchCompiler(this);
 
   // Enable logging before setting up the heap
@@ -3734,7 +3797,7 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
           GetShortBuiltinsCallRegion().contains(heap_.code_region());
     }
   }
-#if V8_EXTERNAL_CODE_SPACE
+#ifdef V8_EXTERNAL_CODE_SPACE
   if (heap_.code_range()) {
     code_cage_base_ = GetPtrComprCageBaseAddress(heap_.code_range()->base());
   } else {
@@ -3787,7 +3850,7 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
     // this at mksnapshot-time, but not at runtime.
     // See also: https://crbug.com/v8/8713.
     heap_.SetInterpreterEntryTrampolineForProfiling(
-        heap_.builtin(Builtin::kInterpreterEntryTrampoline));
+        builtins()->code(Builtin::kInterpreterEntryTrampoline));
 #endif
 
     builtins_constants_table_builder_->Finalize();
@@ -3820,7 +3883,7 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
 
   // If we are deserializing, read the state into the now-empty heap.
   {
-    CodeSpaceMemoryModificationScope modification_scope(heap());
+    CodePageCollectionMemoryModificationScope modification_scope(heap());
 
     if (create_heap_objects) {
       heap_.read_only_space()->ClearStringPaddingIfNeeded();
@@ -4360,7 +4423,8 @@ MaybeHandle<JSPromise> Isolate::RunHostImportModuleDynamicallyCallback(
   v8::Local<v8::Context> api_context =
       v8::Utils::ToLocal(Handle<Context>::cast(native_context()));
   if (host_import_module_dynamically_with_import_assertions_callback_ ==
-      nullptr) {
+          nullptr &&
+      host_import_module_dynamically_callback_ == nullptr) {
     Handle<Object> exception =
         factory()->NewError(error_function(), MessageTemplate::kUnsupported);
     return NewRejectedPromise(this, api_context, exception);
@@ -4383,18 +4447,31 @@ MaybeHandle<JSPromise> Isolate::RunHostImportModuleDynamicallyCallback(
     clear_pending_exception();
     return NewRejectedPromise(this, api_context, exception);
   }
-  // TODO(cbruni, v8:12302): Avoid creating tempory ScriptOrModule objects.
-  auto script_or_module = i::Handle<i::ScriptOrModule>::cast(
-      this->factory()->NewStruct(i::SCRIPT_OR_MODULE_TYPE));
-  script_or_module->set_resource_name(referrer->name());
-  script_or_module->set_host_defined_options(referrer->host_defined_options());
-  ASSIGN_RETURN_ON_SCHEDULED_EXCEPTION_VALUE(
-      this, promise,
-      host_import_module_dynamically_with_import_assertions_callback_(
-          api_context, v8::Utils::ToLocal(script_or_module),
-          v8::Utils::ToLocal(specifier_str),
-          ToApiHandle<v8::FixedArray>(import_assertions_array)),
-      MaybeHandle<JSPromise>());
+  if (host_import_module_dynamically_callback_) {
+    ASSIGN_RETURN_ON_SCHEDULED_EXCEPTION_VALUE(
+        this, promise,
+        host_import_module_dynamically_callback_(
+            api_context,
+            v8::Utils::ToLocal(handle(referrer->host_defined_options(), this)),
+            v8::Utils::ToLocal(handle(referrer->name(), this)),
+            v8::Utils::ToLocal(specifier_str),
+            ToApiHandle<v8::FixedArray>(import_assertions_array)),
+        MaybeHandle<JSPromise>());
+  } else {
+    // TODO(cbruni, v8:12302): Avoid creating tempory ScriptOrModule objects.
+    auto script_or_module = i::Handle<i::ScriptOrModule>::cast(
+        this->factory()->NewStruct(i::SCRIPT_OR_MODULE_TYPE));
+    script_or_module->set_resource_name(referrer->name());
+    script_or_module->set_host_defined_options(
+        referrer->host_defined_options());
+    ASSIGN_RETURN_ON_SCHEDULED_EXCEPTION_VALUE(
+        this, promise,
+        host_import_module_dynamically_with_import_assertions_callback_(
+            api_context, v8::Utils::ToLocal(script_or_module),
+            v8::Utils::ToLocal(specifier_str),
+            ToApiHandle<v8::FixedArray>(import_assertions_array)),
+        MaybeHandle<JSPromise>());
+  }
   return v8::Utils::OpenHandle(*promise);
 }
 
@@ -4486,7 +4563,14 @@ MaybeHandle<FixedArray> Isolate::GetImportAssertionsFromArgument(
 void Isolate::ClearKeptObjects() { heap()->ClearKeptObjects(); }
 
 void Isolate::SetHostImportModuleDynamicallyCallback(
+    HostImportModuleDynamicallyCallback callback) {
+  DCHECK_NULL(host_import_module_dynamically_with_import_assertions_callback_);
+  host_import_module_dynamically_callback_ = callback;
+}
+
+void Isolate::SetHostImportModuleDynamicallyCallback(
     HostImportModuleDynamicallyWithImportAssertionsCallback callback) {
+  DCHECK_NULL(host_import_module_dynamically_callback_);
   host_import_module_dynamically_with_import_assertions_callback_ = callback;
 }
 
@@ -5005,6 +5089,7 @@ bool Overlapping(const MemoryRange& a, const MemoryRange& b) {
 #endif  // DEBUG
 
 void Isolate::AddCodeMemoryRange(MemoryRange range) {
+  base::MutexGuard guard(&code_pages_mutex_);
   std::vector<MemoryRange>* old_code_pages = GetCodePages();
   DCHECK_NOT_NULL(old_code_pages);
 #ifdef DEBUG
@@ -5188,7 +5273,7 @@ void Isolate::AttachToSharedIsolate() {
 
   if (shared_isolate_) {
     DCHECK(shared_isolate_->is_shared());
-    shared_isolate_->AppendAsClientIsolate(this);
+    shared_isolate_->global_safepoint()->AppendClient(this);
   }
 
 #if DEBUG
@@ -5200,47 +5285,13 @@ void Isolate::DetachFromSharedIsolate() {
   DCHECK(attached_to_shared_isolate_);
 
   if (shared_isolate_) {
-    shared_isolate_->RemoveAsClientIsolate(this);
+    shared_isolate_->global_safepoint()->RemoveClient(this);
     shared_isolate_ = nullptr;
   }
 
 #if DEBUG
   attached_to_shared_isolate_ = false;
 #endif  // DEBUG
-}
-
-void Isolate::AppendAsClientIsolate(Isolate* client) {
-  base::MutexGuard guard(&client_isolate_mutex_);
-
-  DCHECK_NULL(client->prev_client_isolate_);
-  DCHECK_NULL(client->next_client_isolate_);
-  DCHECK_NE(client_isolate_head_, client);
-
-  if (client_isolate_head_) {
-    client_isolate_head_->prev_client_isolate_ = client;
-  }
-
-  client->prev_client_isolate_ = nullptr;
-  client->next_client_isolate_ = client_isolate_head_;
-
-  client_isolate_head_ = client;
-}
-
-void Isolate::RemoveAsClientIsolate(Isolate* client) {
-  base::MutexGuard guard(&client_isolate_mutex_);
-
-  if (client->next_client_isolate_) {
-    client->next_client_isolate_->prev_client_isolate_ =
-        client->prev_client_isolate_;
-  }
-
-  if (client->prev_client_isolate_) {
-    client->prev_client_isolate_->next_client_isolate_ =
-        client->next_client_isolate_;
-  } else {
-    DCHECK_EQ(client_isolate_head_, client);
-    client_isolate_head_ = client->next_client_isolate_;
-  }
 }
 
 }  // namespace internal

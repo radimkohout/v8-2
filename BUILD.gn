@@ -507,6 +507,9 @@ assert(!v8_enable_map_packing || !v8_enable_pointer_compression,
 assert(!v8_enable_map_packing || v8_current_cpu == "x64",
        "Map packing is only supported on x64")
 
+assert(!v8_enable_external_code_space || v8_enable_pointer_compression,
+       "External code space feature requires pointer compression")
+
 assert(!v8_enable_heap_sandbox || v8_enable_pointer_compression,
        "V8 Heap Sandbox requires pointer compression")
 
@@ -1781,6 +1784,7 @@ torque_files = [
   "src/objects/template-objects.tq",
   "src/objects/templates.tq",
   "src/objects/torque-defined-classes.tq",
+  "src/objects/turbofan-types.tq",
   "test/torque/test-torque.tq",
   "third_party/v8/builtins/array-sort.tq",
 ]
@@ -2868,6 +2872,7 @@ v8_header_set("v8_internal_headers") {
     "src/diagnostics/unwinder.h",
     "src/execution/arguments-inl.h",
     "src/execution/arguments.h",
+    "src/execution/encoded-c-signature.h",
     "src/execution/execution.h",
     "src/execution/frame-constants.h",
     "src/execution/frames-inl.h",
@@ -3250,6 +3255,8 @@ v8_header_set("v8_internal_headers") {
     "src/objects/torque-defined-classes.h",
     "src/objects/transitions-inl.h",
     "src/objects/transitions.h",
+    "src/objects/turbofan-types-inl.h",
+    "src/objects/turbofan-types.h",
     "src/objects/type-hints.h",
     "src/objects/value-serializer.h",
     "src/objects/visitors-inl.h",
@@ -3319,6 +3326,8 @@ v8_header_set("v8_internal_headers") {
     "src/roots/roots.h",
     "src/runtime/runtime-utils.h",
     "src/runtime/runtime.h",
+    "src/security/caged-pointer-inl.h",
+    "src/security/caged-pointer.h",
     "src/security/external-pointer-inl.h",
     "src/security/external-pointer-table.h",
     "src/security/external-pointer.h",
@@ -3702,6 +3711,8 @@ v8_header_set("v8_internal_headers") {
     ]
   } else if (v8_current_cpu == "ppc64") {
     sources += [  ### gcmole(arch:ppc64) ###
+      "src/baseline/s390/baseline-assembler-s390-inl.h",
+      "src/baseline/s390/baseline-compiler-s390-inl.h",
       "src/codegen/ppc/assembler-ppc-inl.h",
       "src/codegen/ppc/assembler-ppc.h",
       "src/codegen/ppc/constants-ppc.h",
@@ -4076,6 +4087,7 @@ v8_source_set("v8_base_without_compiler") {
     "src/diagnostics/perf-jit.cc",
     "src/diagnostics/unwinder.cc",
     "src/execution/arguments.cc",
+    "src/execution/encoded-c-signature.cc",
     "src/execution/execution.cc",
     "src/execution/frames.cc",
     "src/execution/futex-emulation.cc",

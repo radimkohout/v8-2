@@ -995,7 +995,42 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
     vinstr(0x##opcode, dst, src1, src2, k##prefix, k##escape, kW0);          \
   }
 
-  SSE2_INSTRUCTION_LIST(DECLARE_SSE2_AVX_INSTRUCTION)
+#define DECLARE_SSE2_PD_AVX_INSTRUCTION(instruction, prefix, escape, opcode) \
+  DECLARE_SSE2_AVX_INSTRUCTION(instruction, prefix, escape, opcode)          \
+  void v##instruction(YMMRegister dst, YMMRegister src1, YMMRegister src2) { \
+    vinstr(0x##opcode, dst, src1, src2, k##prefix, k##escape, kW0, AVX);     \
+  }                                                                          \
+  void v##instruction(YMMRegister dst, YMMRegister src1, Operand src2) {     \
+    vinstr(0x##opcode, dst, src1, src2, k##prefix, k##escape, kW0, AVX);     \
+  }
+
+  SSE2_INSTRUCTION_LIST_PD(DECLARE_SSE2_PD_AVX_INSTRUCTION)
+#undef DECLARE_SSE2_PD_AVX_INSTRUCTION
+
+#define DECLARE_SSE2_PI_AVX_INSTRUCTION(instruction, prefix, escape, opcode) \
+  DECLARE_SSE2_AVX_INSTRUCTION(instruction, prefix, escape, opcode)          \
+  void v##instruction(YMMRegister dst, YMMRegister src1, YMMRegister src2) { \
+    vinstr(0x##opcode, dst, src1, src2, k##prefix, k##escape, kW0, AVX2);    \
+  }                                                                          \
+  void v##instruction(YMMRegister dst, YMMRegister src1, Operand src2) {     \
+    vinstr(0x##opcode, dst, src1, src2, k##prefix, k##escape, kW0, AVX2);    \
+  }
+
+  SSE2_INSTRUCTION_LIST_PI(DECLARE_SSE2_PI_AVX_INSTRUCTION)
+#undef DECLARE_SSE2_PI_AVX_INSTRUCTION
+
+#define DECLARE_SSE2_SHIFT_AVX_INSTRUCTION(instruction, prefix, escape,      \
+                                           opcode)                           \
+  DECLARE_SSE2_AVX_INSTRUCTION(instruction, prefix, escape, opcode)          \
+  void v##instruction(YMMRegister dst, YMMRegister src1, XMMRegister src2) { \
+    vinstr(0x##opcode, dst, src1, src2, k##prefix, k##escape, kW0, AVX2);    \
+  }                                                                          \
+  void v##instruction(YMMRegister dst, YMMRegister src1, Operand src2) {     \
+    vinstr(0x##opcode, dst, src1, src2, k##prefix, k##escape, kW0, AVX2);    \
+  }
+
+  SSE2_INSTRUCTION_LIST_SHIFT(DECLARE_SSE2_SHIFT_AVX_INSTRUCTION)
+#undef DECLARE_SSE2_SHIFT_AVX_INSTRUCTION
 #undef DECLARE_SSE2_AVX_INSTRUCTION
 
 #define DECLARE_SSE2_UNOP_AVX_INSTRUCTION(instruction, prefix, escape, opcode) \
@@ -1099,6 +1134,14 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   }                                                                           \
   void v##instruction(XMMRegister dst, XMMRegister src1, Operand src2) {      \
     vinstr(0x##opcode, dst, src1, src2, k##prefix, k##escape1##escape2, kW0); \
+  }                                                                           \
+  void v##instruction(YMMRegister dst, YMMRegister src1, YMMRegister src2) {  \
+    vinstr(0x##opcode, dst, src1, src2, k##prefix, k##escape1##escape2, kW0,  \
+           AVX2);                                                             \
+  }                                                                           \
+  void v##instruction(YMMRegister dst, YMMRegister src1, Operand src2) {      \
+    vinstr(0x##opcode, dst, src1, src2, k##prefix, k##escape1##escape2, kW0,  \
+           AVX2);                                                             \
   }
 
   SSSE3_INSTRUCTION_LIST(DECLARE_SSE34_AVX_INSTRUCTION)
@@ -1286,7 +1329,10 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   // AVX instruction
   void vmovddup(XMMRegister dst, XMMRegister src);
   void vmovddup(XMMRegister dst, Operand src);
+  void vmovddup(YMMRegister dst, YMMRegister src);
+  void vmovddup(YMMRegister dst, Operand src);
   void vmovshdup(XMMRegister dst, XMMRegister src);
+  void vmovshdup(YMMRegister dst, YMMRegister src);
   void vbroadcastss(XMMRegister dst, Operand src);
   void vbroadcastss(XMMRegister dst, XMMRegister src);
   void vbroadcastss(YMMRegister dst, Operand src);
@@ -2428,6 +2474,10 @@ extern template EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE)
 void Assembler::vinstr(byte op, YMMRegister dst, YMMRegister src1,
                        Operand src2, SIMDPrefix pp, LeadingOpcode m,
                        VexW w, CpuFeature feature);
+extern template EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE)
+void Assembler::vinstr(byte op, YMMRegister dst, YMMRegister src1,
+                       XMMRegister src2, SIMDPrefix pp,
+                       LeadingOpcode m, VexW w, CpuFeature feature);
 extern template EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE)
 void Assembler::vinstr(byte op, YMMRegister dst, XMMRegister src1,
                        Operand src2, SIMDPrefix pp, LeadingOpcode m,

@@ -90,6 +90,13 @@ constexpr int64_t TB = static_cast<int64_t>(GB) * 1024;
 #define V8_DEFAULT_STACK_SIZE_KB 984
 #endif
 
+#if defined(USE_SIMULATOR) && defined(V8_TARGET_ARCH_ARM64)
+#define USE_SIMULATOR_WITH_GENERIC_C_CALLS
+#define IF_USE_SIMULATOR(V) , V
+#else
+#define IF_USE_SIMULATOR(V)
+#endif
+
 // Minimum stack size in KB required by compilers.
 constexpr int kStackSpaceRequiredForCompilation = 40;
 
@@ -920,6 +927,12 @@ enum class REPLMode {
 inline REPLMode construct_repl_mode(bool is_repl_mode) {
   return is_repl_mode ? REPLMode::kYes : REPLMode::kNo;
 }
+
+// Indicates whether a script is parsed during debugging.
+enum class ParsingWhileDebugging {
+  kYes,
+  kNo,
+};
 
 // Flag indicating whether code is built into the VM (one of the natives files).
 enum NativesFlag { NOT_NATIVES_CODE, EXTENSION_CODE, INSPECTOR_CODE };

@@ -43,6 +43,10 @@
 #include "src/baseline/ia32/baseline-compiler-ia32-inl.h"
 #elif V8_TARGET_ARCH_ARM
 #include "src/baseline/arm/baseline-compiler-arm-inl.h"
+#elif V8_TARGET_ARCH_PPC64
+#include "src/baseline/ppc/baseline-compiler-ppc-inl.h"
+#elif V8_TARGET_ARCH_S390X
+#include "src/baseline/s390/baseline-compiler-s390-inl.h"
 #elif V8_TARGET_ARCH_RISCV64
 #include "src/baseline/riscv64/baseline-compiler-riscv64-inl.h"
 #elif V8_TARGET_ARCH_MIPS64
@@ -926,10 +930,11 @@ void BaselineCompiler::VisitStaNamedProperty() {
 }
 
 void BaselineCompiler::VisitStaNamedOwnProperty() {
-  // TODO(v8:11429,ishell): Currently we use StoreOwnIC only for storing
-  // properties that already exist in the boilerplate therefore we can use
-  // StoreIC.
-  VisitStaNamedProperty();
+  CallBuiltin<Builtin::kStoreOwnICBaseline>(
+      RegisterOperand(0),               // object
+      Constant<Name>(1),                // name
+      kInterpreterAccumulatorRegister,  // value
+      IndexAsTagged(2));                // slot
 }
 
 void BaselineCompiler::VisitStaKeyedProperty() {

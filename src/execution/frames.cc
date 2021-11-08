@@ -680,6 +680,7 @@ StackFrame::Type StackFrame::ComputeType(const StackFrameIteratorBase* iterator,
     case WASM_EXIT:
     case WASM_DEBUG_BREAK:
     case JS_TO_WASM:
+    case RETURN_PROMISE_ON_SUSPEND:
 #endif  // V8_ENABLE_WEBASSEMBLY
       return candidate;
     case OPTIMIZED:
@@ -718,7 +719,7 @@ void NativeFrame::ComputeCallerState(State* state) const {
 }
 
 Code EntryFrame::unchecked_code() const {
-  return isolate()->heap()->builtin(Builtin::kJSEntry);
+  return isolate()->builtins()->code(Builtin::kJSEntry);
 }
 
 void EntryFrame::ComputeCallerState(State* state) const {
@@ -740,7 +741,7 @@ StackFrame::Type CWasmEntryFrame::GetCallerState(State* state) const {
 #endif  // V8_ENABLE_WEBASSEMBLY
 
 Code ConstructEntryFrame::unchecked_code() const {
-  return isolate()->heap()->builtin(Builtin::kJSConstructEntry);
+  return isolate()->builtins()->code(Builtin::kJSConstructEntry);
 }
 
 void ExitFrame::ComputeCallerState(State* state) const {
@@ -1036,6 +1037,7 @@ void CommonFrame::IterateCompiledFrame(RootVisitor* v) const {
       case CONSTRUCT:
 #if V8_ENABLE_WEBASSEMBLY
       case JS_TO_WASM:
+      case RETURN_PROMISE_ON_SUSPEND:
       case C_WASM_ENTRY:
       case WASM_DEBUG_BREAK:
 #endif  // V8_ENABLE_WEBASSEMBLY
@@ -1124,10 +1126,15 @@ void CommonFrame::IterateCompiledFrame(RootVisitor* v) const {
           // We don't need to update smi values or full pointers.
           *spill_slot.location() =
               DecompressTaggedPointer(cage_base, static_cast<Tagged_t>(value));
-          // Ensure that the spill slot contains correct heap object.
-          DCHECK(HeapObject::cast(Object(*spill_slot.location()))
-                     .map(cage_base)
-                     .IsMap());
+          if (DEBUG_BOOL) {
+            // Ensure that the spill slot contains correct heap object.
+            HeapObject raw = HeapObject::cast(Object(*spill_slot.location()));
+            MapWord map_word = raw.map_word(cage_base, kRelaxedLoad);
+            HeapObject forwarded = map_word.IsForwardingAddress()
+                                       ? map_word.ToForwardingAddress()
+                                       : raw;
+            CHECK(forwarded.map(cage_base).IsMap());
+          }
         }
       } else {
         Tagged_t compressed_value =
@@ -2079,10 +2086,29 @@ void JsToWasmFrame::Iterate(RootVisitor* v) const {
     IterateCompiledFrame(v);
     return;
   }
-  // The [fp - 2*kSystemPointerSize] on the stack is a value indicating how
-  // many values should be scanned from the top.
-  intptr_t scan_count =
-      *reinterpret_cast<intptr_t*>(fp() - 2 * kSystemPointerSize);
+  // The [fp + BuiltinFrameConstants::kGCScanSlotCount] on the stack is a value
+  // indicating how many values should be scanned from the top.
+  intptr_t scan_count = *reinterpret_cast<intptr_t*>(
+      fp() + BuiltinWasmWrapperConstants::kGCScanSlotCountOffset);
+
+  FullObjectSlot spill_slot_base(&Memory<Address>(sp()));
+  FullObjectSlot spill_slot_limit(
+      &Memory<Address>(sp() + scan_count * kSystemPointerSize));
+  v->VisitRootPointers(Root::kStackRoots, nullptr, spill_slot_base,
+                       spill_slot_limit);
+}
+
+void ReturnPromiseOnSuspendFrame::Iterate(RootVisitor* v) const {
+  //  See JsToWasmFrame layout.
+#ifdef DEBUG
+  Code code = GetContainingCode(isolate(), pc());
+  DCHECK(code.is_builtin() &&
+         code.builtin_id() == Builtin::kWasmReturnPromiseOnSuspend);
+#endif
+  // The [fp + BuiltinFrameConstants::kGCScanSlotCountOffset] on the stack is a
+  // value indicating how many values should be scanned from the top.
+  intptr_t scan_count = *reinterpret_cast<intptr_t*>(
+      fp() + BuiltinWasmWrapperConstants::kGCScanSlotCountOffset);
 
   FullObjectSlot spill_slot_base(&Memory<Address>(sp()));
   FullObjectSlot spill_slot_limit(

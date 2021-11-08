@@ -181,6 +181,12 @@ struct MaybeBoolFlag {
 #define V8_VIRTUAL_MEMORY_CAGE_BOOL false
 #endif
 
+#ifdef V8_CAGED_POINTERS
+#define V8_CAGED_POINTERS_BOOL true
+#else
+#define V8_CAGED_POINTERS_BOOL false
+#endif
+
 // D8's MultiMappedAllocator is only available on Linux, and only if the virtual
 // memory cage is not enabled.
 #if V8_OS_LINUX && !V8_VIRTUAL_MEMORY_CAGE_BOOL
@@ -439,8 +445,8 @@ DEFINE_NEG_IMPLICATION(enable_third_party_heap, allocation_site_pretenuring)
 DEFINE_NEG_IMPLICATION(enable_third_party_heap, turbo_allocation_folding)
 DEFINE_NEG_IMPLICATION(enable_third_party_heap, concurrent_recompilation)
 DEFINE_NEG_IMPLICATION(enable_third_party_heap, concurrent_inlining)
-DEFINE_NEG_IMPLICATION(enable_third_party_heap,
-                       finalize_streaming_on_background)
+DEFINE_NEG_IMPLICATION(enable_third_party_heap, script_streaming)
+DEFINE_NEG_IMPLICATION(enable_third_party_heap, parallel_compile_tasks)
 DEFINE_NEG_IMPLICATION(enable_third_party_heap, use_marking_progress_bar)
 DEFINE_NEG_IMPLICATION(enable_third_party_heap, move_object_start)
 DEFINE_NEG_IMPLICATION(enable_third_party_heap, concurrent_marking)
@@ -549,6 +555,9 @@ DEFINE_NEG_IMPLICATION(jitless, interpreted_frames_native_stack)
 
 DEFINE_BOOL(assert_types, false,
             "generate runtime type assertions to test the typer")
+// TODO(tebbi): Support allocating types from background thread.
+DEFINE_NEG_IMPLICATION(assert_types, concurrent_recompilation)
+DEFINE_NEG_IMPLICATION(assert_types, concurrent_inlining)
 
 DEFINE_BOOL(trace_compilation_dependencies, false, "trace code dependencies")
 // Depend on --trace-deopt-verbose for reporting dependency invalidations.
@@ -985,6 +994,12 @@ DEFINE_BOOL(wasm_tier_up, true,
             "have an effect)")
 DEFINE_BOOL(wasm_dynamic_tiering, false,
             "enable dynamic tier up to the optimizing compiler")
+DEFINE_BOOL(new_wasm_dynamic_tiering, false, "dynamic tier up (new impl)")
+// For dynamic tiering to have an effect, we have to turn off eager tierup.
+// This is handled in module-compiler.cc for --wasm-dynamic-tiering.
+DEFINE_NEG_IMPLICATION(new_wasm_dynamic_tiering, wasm_tier_up)
+DEFINE_INT(wasm_tiering_budget, 1800000,
+           "budget for dynamic tiering (rough approximation of bytes executed")
 DEFINE_INT(
     wasm_caching_threshold, 1000000,
     "the amount of wasm top tier code that triggers the next caching event")
@@ -1091,7 +1106,6 @@ DEFINE_BOOL(trace_wasm_speculative_inlining, false,
             "trace wasm speculative inlining")
 DEFINE_IMPLICATION(wasm_speculative_inlining, experimental_wasm_typed_funcref)
 DEFINE_IMPLICATION(wasm_speculative_inlining, wasm_inlining)
-DEFINE_IMPLICATION(wasm_speculative_inlining, wasm_dynamic_tiering)
 DEFINE_NEG_IMPLICATION(wasm_speculative_inlining, wasm_tier_up)
 DEFINE_BOOL(wasm_loop_unrolling, true,
             "enable loop unrolling for wasm functions")
@@ -1465,14 +1479,8 @@ DEFINE_BOOL(enable_regexp_unaligned_accesses, true,
 DEFINE_BOOL(script_streaming, true, "enable parsing on background")
 DEFINE_BOOL(stress_background_compile, false,
             "stress test parsing on background")
-DEFINE_BOOL(
-    finalize_streaming_on_background, true,
-    "perform the script streaming finalization on the background thread")
 DEFINE_BOOL(concurrent_cache_deserialization, true,
             "enable deserializing code caches on background")
-// TODO(leszeks): Parallel compile tasks currently don't support off-thread
-// finalization.
-DEFINE_NEG_IMPLICATION(parallel_compile_tasks, finalize_streaming_on_background)
 DEFINE_BOOL(disable_old_api_accessors, false,
             "Disable old-style API accessors whose setters trigger through the "
             "prototype chain")
@@ -2166,6 +2174,7 @@ DEFINE_NEG_IMPLICATION(predictable, memory_reducer)
 DEFINE_IMPLICATION(predictable, single_threaded_gc)
 DEFINE_NEG_IMPLICATION(predictable, concurrent_recompilation)
 DEFINE_NEG_IMPLICATION(predictable, lazy_compile_dispatcher)
+DEFINE_NEG_IMPLICATION(predictable, parallel_compile_tasks)
 DEFINE_NEG_IMPLICATION(predictable, stress_concurrent_inlining)
 
 DEFINE_BOOL(predictable_gc_schedule, false,
@@ -2184,6 +2193,7 @@ DEFINE_BOOL(single_threaded, false, "disable the use of background tasks")
 DEFINE_IMPLICATION(single_threaded, single_threaded_gc)
 DEFINE_NEG_IMPLICATION(single_threaded, concurrent_recompilation)
 DEFINE_NEG_IMPLICATION(single_threaded, lazy_compile_dispatcher)
+DEFINE_NEG_IMPLICATION(single_threaded, parallel_compile_tasks)
 DEFINE_NEG_IMPLICATION(single_threaded, stress_concurrent_inlining)
 
 //

@@ -34,11 +34,12 @@ namespace liftoff {
 //  -1   | 0xa: WASM          |
 //  -2   |     instance       |
 //  -3   |    feedback vector |
+//  -4   |    tiering budget  |
 //  -----+--------------------+---------------------------
-//  -4   |    slot 0 (high)   |   ^
-//  -5   |    slot 0 (low)    |   |
-//  -6   |    slot 1 (high)   | Frame slots
-//  -7   |    slot 1 (low)    |   |
+//  -5   |    slot 0 (high)   |   ^
+//  -6   |    slot 0 (low)    |   |
+//  -7   |    slot 1 (high)   | Frame slots
+//  -8   |    slot 1 (low)    |   |
 //       |                    |   v
 //  -----+--------------------+  <-- stack ptr (sp)
 //
@@ -48,6 +49,8 @@ constexpr int32_t kInstanceOffset =
     (FLAG_enable_embedded_constant_pool ? 3 : 2) * kSystemPointerSize;
 constexpr int kFeedbackVectorOffset =
     (FLAG_enable_embedded_constant_pool ? 4 : 3) * kSystemPointerSize;
+constexpr int kTierupBudgetOffset =
+    (FLAG_enable_embedded_constant_pool ? 5 : 4) * kSystemPointerSize;
 
 inline MemOperand GetHalfStackSlot(int offset, RegPairHalf half) {
   int32_t half_offset =
@@ -219,7 +222,7 @@ void LiftoffAssembler::AbortCompilation() { FinishCode(); }
 
 // static
 constexpr int LiftoffAssembler::StaticStackFrameSize() {
-  return liftoff::kFeedbackVectorOffset;
+  return liftoff::kTierupBudgetOffset;
 }
 
 int LiftoffAssembler::SlotSizeForType(ValueKind kind) {
@@ -614,9 +617,6 @@ void LiftoffAssembler::AtomicExchange(Register dst_addr, Register offset_reg,
                                       uintptr_t offset_imm,
                                       LiftoffRegister value,
                                       LiftoffRegister result, StoreType type) {
-#if defined(V8_OS_AIX)
-  bailout(kUnsupportedArchitecture, "atomic");
-#else
   Register offset = r0;
   if (offset_imm != 0) {
     mov(ip, Operand(offset_imm));
@@ -671,16 +671,12 @@ void LiftoffAssembler::AtomicExchange(Register dst_addr, Register offset_reg,
     default:
       UNREACHABLE();
   }
-#endif
 }
 
 void LiftoffAssembler::AtomicCompareExchange(
     Register dst_addr, Register offset_reg, uintptr_t offset_imm,
     LiftoffRegister expected, LiftoffRegister new_value, LiftoffRegister result,
     StoreType type) {
-#if defined(V8_OS_AIX)
-  bailout(kUnsupportedArchitecture, "atomic");
-#else
   Register offset = r0;
   if (offset_imm != 0) {
     mov(ip, Operand(offset_imm));
@@ -704,13 +700,13 @@ void LiftoffAssembler::AtomicCompareExchange(
     case StoreType::kI32Store16:
     case StoreType::kI64Store16: {
       if (is_be) {
-        Push(r3, r4);
-        ByteReverseU16(r3, new_value.gp());
-        ByteReverseU16(r4, expected.gp());
-        TurboAssembler::AtomicCompareExchange<uint16_t>(dst, r4, r3,
-                                                        result.gp(), r0);
+        Push(new_value.gp(), expected.gp());
+        ByteReverseU16(new_value.gp(), new_value.gp());
+        ByteReverseU16(expected.gp(), expected.gp());
+        TurboAssembler::AtomicCompareExchange<uint16_t>(
+            dst, expected.gp(), new_value.gp(), result.gp(), r0);
         ByteReverseU16(result.gp(), result.gp());
-        Pop(r3, r4);
+        Pop(new_value.gp(), expected.gp());
       } else {
         TurboAssembler::AtomicCompareExchange<uint16_t>(
             dst, expected.gp(), new_value.gp(), result.gp(), r0);
@@ -720,13 +716,13 @@ void LiftoffAssembler::AtomicCompareExchange(
     case StoreType::kI32Store:
     case StoreType::kI64Store32: {
       if (is_be) {
-        Push(r3, r4);
-        ByteReverseU32(r3, new_value.gp());
-        ByteReverseU32(r4, expected.gp());
-        TurboAssembler::AtomicCompareExchange<uint32_t>(dst, r4, r3,
-                                                        result.gp(), r0);
+        Push(new_value.gp(), expected.gp());
+        ByteReverseU32(new_value.gp(), new_value.gp());
+        ByteReverseU32(expected.gp(), expected.gp());
+        TurboAssembler::AtomicCompareExchange<uint32_t>(
+            dst, expected.gp(), new_value.gp(), result.gp(), r0);
         ByteReverseU32(result.gp(), result.gp());
-        Pop(r3, r4);
+        Pop(new_value.gp(), expected.gp());
       } else {
         TurboAssembler::AtomicCompareExchange<uint32_t>(
             dst, expected.gp(), new_value.gp(), result.gp(), r0);
@@ -735,13 +731,13 @@ void LiftoffAssembler::AtomicCompareExchange(
     }
     case StoreType::kI64Store: {
       if (is_be) {
-        Push(r3, r4);
-        ByteReverseU64(r3, new_value.gp());
-        ByteReverseU64(r4, expected.gp());
-        TurboAssembler::AtomicCompareExchange<uint64_t>(dst, r4, r3,
-                                                        result.gp(), r0);
+        Push(new_value.gp(), expected.gp());
+        ByteReverseU64(new_value.gp(), new_value.gp());
+        ByteReverseU64(expected.gp(), expected.gp());
+        TurboAssembler::AtomicCompareExchange<uint64_t>(
+            dst, expected.gp(), new_value.gp(), result.gp(), r0);
         ByteReverseU64(result.gp(), result.gp());
-        Pop(r3, r4);
+        Pop(new_value.gp(), expected.gp());
       } else {
         TurboAssembler::AtomicCompareExchange<uint64_t>(
             dst, expected.gp(), new_value.gp(), result.gp(), r0);
@@ -751,7 +747,6 @@ void LiftoffAssembler::AtomicCompareExchange(
     default:
       UNREACHABLE();
   }
-#endif
 }
 
 void LiftoffAssembler::AtomicFence() { sync(); }
@@ -1593,6 +1588,13 @@ void LiftoffAssembler::emit_i32_cond_jumpi(LiftoffCondition liftoff_cond,
     CmpU32(lhs, Operand(imm), r0);
   }
   b(cond, label);
+}
+
+void LiftoffAssembler::emit_i32_subi_jump_negative(Register value,
+                                                   int subtrahend,
+                                                   Label* result_negative) {
+  SubS64(value, value, Operand(subtrahend), r0, LeaveOE, SetRC);
+  blt(result_negative, cr0);
 }
 
 void LiftoffAssembler::emit_i32_eqz(Register dst, Register src) {

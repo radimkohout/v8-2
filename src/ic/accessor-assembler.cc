@@ -15,6 +15,7 @@
 #include "src/ic/stub-cache.h"
 #include "src/logging/counters.h"
 #include "src/objects/cell.h"
+#include "src/objects/feedback-vector.h"
 #include "src/objects/foreign.h"
 #include "src/objects/heap-number.h"
 #include "src/objects/megadom-handler.h"
@@ -224,7 +225,7 @@ void AccessorAssembler::HandleLoadICHandlerCase(
 
   BIND(&call_handler);
   {
-    // TODO(v8:11880): avoid roundtrips between cdc and code.
+    // TODO(v8:11880): call CodeT directly.
     TNode<Code> code_handler = FromCodeT(CAST(handler));
     exit_point->ReturnCallStub(LoadWithVectorDescriptor{}, code_handler,
                                p->context(), p->lookup_start_object(),
@@ -599,7 +600,15 @@ void AccessorAssembler::HandleLoadICSmiHandlerCase(
         Return(result);
 
         BIND(&if_oob_string);
-        GotoIf(IntPtrLessThan(index, IntPtrConstant(0)), miss);
+        if (Is64()) {
+          // Indices >= 4294967295 are stored as named properties; handle them
+          // in the runtime.
+          GotoIfNot(UintPtrLessThanOrEqual(
+                        index, IntPtrConstant(JSObject::kMaxElementIndex)),
+                    miss);
+        } else {
+          GotoIf(IntPtrLessThan(index, IntPtrConstant(0)), miss);
+        }
         TNode<BoolT> allow_out_of_bounds =
             IsSetWord<LoadHandler::AllowOutOfBoundsBits>(handler_word);
         GotoIfNot(allow_out_of_bounds, miss);
@@ -987,8 +996,7 @@ TNode<Object> AccessorAssembler::HandleProtoHandler(
     if (on_code_handler) {
       Label if_smi_handler(this);
       GotoIf(TaggedIsSmi(smi_or_code_handler), &if_smi_handler);
-      // TODO(v8:11880): avoid roundtrips between cdc and code.
-      TNode<Code> code = FromCodeT(CAST(smi_or_code_handler));
+      TNode<CodeT> code = CAST(smi_or_code_handler);
       on_code_handler(code);
 
       BIND(&if_smi_handler);
@@ -1223,6 +1231,10 @@ void AccessorAssembler::HandleStoreICHandlerCase(
         properties, CAST(p->name()), &dictionary_found, &var_name_index, miss);
     BIND(&dictionary_found);
     {
+      if (p->IsDefineOwn()) {
+        // Take slow path to throw if a private name already exists.
+        GotoIf(IsPrivateSymbol(CAST(p->name())), &if_slow);
+      }
       Label if_constant(this), done(this);
       TNode<Uint32T> details =
           LoadDetailsByKeyIndex(properties, var_name_index.value());
@@ -1292,8 +1304,15 @@ void AccessorAssembler::HandleStoreICHandlerCase(
         TailCallRuntime(Runtime::kStoreGlobalIC_Slow, p->context(), p->value(),
                         p->slot(), p->vector(), p->receiver(), p->name());
       } else {
-        TailCallRuntime(Runtime::kKeyedStoreIC_Slow, p->context(), p->value(),
-                        p->receiver(), p->name());
+        Runtime::FunctionId id;
+        if (p->IsStoreOwn()) {
+          id = Runtime::kStoreOwnIC_Slow;
+        } else if (p->IsDefineOwn()) {
+          id = Runtime::kKeyedDefineOwnIC_Slow;
+        } else {
+          id = Runtime::kKeyedStoreIC_Slow;
+        }
+        TailCallRuntime(id, p->context(), p->value(), p->receiver(), p->name());
       }
     }
   }
@@ -1314,7 +1333,7 @@ void AccessorAssembler::HandleStoreICHandlerCase(
     // |handler| is a heap object. Must be code, call it.
     BIND(&call_handler);
     {
-      // TODO(v8:11880): avoid roundtrips between cdc and code.
+      // TODO(v8:11880): call CodeT directly.
       TNode<Code> code_handler = FromCodeT(CAST(strong_handler));
       TailCallStub(StoreWithVectorDescriptor{}, code_handler, p->context(),
                    p->receiver(), p->name(), p->value(), p->slot(),
@@ -1336,6 +1355,9 @@ void AccessorAssembler::HandleStoreICHandlerCase(
     {
       TNode<PropertyCell> property_cell = CAST(map_or_property_cell);
       ExitPoint direct_exit(this);
+      // StoreGlobalIC_PropertyCellCase doesn't properly handle private names
+      // but they are not expected here anyway.
+      CSA_DCHECK(this, BoolConstant(!p->IsDefineOwn()));
       StoreGlobalIC_PropertyCellCase(property_cell, p->value(), &direct_exit,
                                      miss);
     }
@@ -1343,7 +1365,9 @@ void AccessorAssembler::HandleStoreICHandlerCase(
     {
       TNode<Map> map = CAST(map_or_property_cell);
       HandleStoreICTransitionMapHandlerCase(p, map, miss,
-                                            kCheckPrototypeValidity);
+                                            p->IsAnyStoreOwn()
+                                                ? kDontCheckPrototypeValidity
+                                                : kCheckPrototypeValidity);
       Return(p->value());
     }
   }
@@ -1679,16 +1703,17 @@ void AccessorAssembler::HandleStoreICProtoHandler(
   OnCodeHandler on_code_handler;
   if (support_elements == kSupportElements) {
     // Code sub-handlers are expected only in KeyedStoreICs.
-    on_code_handler = [=](TNode<Code> code_handler) {
+    on_code_handler = [=](TNode<CodeT> code_handler) {
       // This is either element store or transitioning element store.
       Label if_element_store(this), if_transitioning_element_store(this);
       Branch(IsStoreHandler0Map(LoadMap(handler)), &if_element_store,
              &if_transitioning_element_store);
       BIND(&if_element_store);
       {
-        TailCallStub(StoreWithVectorDescriptor{}, code_handler, p->context(),
-                     p->receiver(), p->name(), p->value(), p->slot(),
-                     p->vector());
+        // TODO(v8:11880): call CodeT directly.
+        TailCallStub(StoreWithVectorDescriptor{}, FromCodeT(code_handler),
+                     p->context(), p->receiver(), p->name(), p->value(),
+                     p->slot(), p->vector());
       }
 
       BIND(&if_transitioning_element_store);
@@ -1700,9 +1725,10 @@ void AccessorAssembler::HandleStoreICProtoHandler(
 
         GotoIf(IsDeprecatedMap(transition_map), miss);
 
-        TailCallStub(StoreTransitionDescriptor{}, code_handler, p->context(),
-                     p->receiver(), p->name(), transition_map, p->value(),
-                     p->slot(), p->vector());
+        // TODO(v8:11880): call CodeT directly.
+        TailCallStub(StoreTransitionDescriptor{}, FromCodeT(code_handler),
+                     p->context(), p->receiver(), p->name(), transition_map,
+                     p->value(), p->slot(), p->vector());
       }
     };
   }
@@ -1767,6 +1793,11 @@ void AccessorAssembler::HandleStoreICProtoHandler(
       if (ic_mode == ICMode::kGlobalIC) {
         TailCallRuntime(Runtime::kStoreGlobalIC_Slow, p->context(), p->value(),
                         p->slot(), p->vector(), p->receiver(), p->name());
+      } else if (p->IsAnyStoreOwn()) {
+        // DefineOwnIC and StoreOwnIC shouldn't be using slow proto handlers,
+        // otherwise proper slow function must be called.
+        CSA_DCHECK(this, BoolConstant(!p->IsAnyStoreOwn()));
+        Unreachable();
       } else {
         TailCallRuntime(Runtime::kKeyedStoreIC_Slow, p->context(), p->value(),
                         p->receiver(), p->name());
@@ -1846,6 +1877,9 @@ void AccessorAssembler::HandleStoreICProtoHandler(
     BIND(&if_store_global_proxy);
     {
       ExitPoint direct_exit(this);
+      // StoreGlobalIC_PropertyCellCase doesn't properly handle private names
+      // but they are not expected here anyway.
+      CSA_DCHECK(this, BoolConstant(!p->IsDefineOwn()));
       StoreGlobalIC_PropertyCellCase(CAST(holder), p->value(), &direct_exit,
                                      miss);
     }
@@ -3941,7 +3975,7 @@ void AccessorAssembler::StoreInArrayLiteralIC(const StoreICParameters* p) {
 
       {
         // Call the handler.
-        // TODO(v8:11880): avoid roundtrips between cdc and code.
+        // TODO(v8:11880): call CodeT directly.
         TNode<Code> code_handler = FromCodeT(CAST(handler));
         TailCallStub(StoreWithVectorDescriptor{}, code_handler, p->context(),
                      p->receiver(), p->name(), p->value(), p->slot(),
@@ -3955,7 +3989,7 @@ void AccessorAssembler::StoreInArrayLiteralIC(const StoreICParameters* p) {
         TNode<Map> transition_map =
             CAST(GetHeapObjectAssumeWeak(maybe_transition_map, &miss));
         GotoIf(IsDeprecatedMap(transition_map), &miss);
-        // TODO(v8:11880): avoid roundtrips between cdc and code.
+        // TODO(v8:11880): call CodeT directly.
         TNode<Code> code = FromCodeT(
             CAST(LoadObjectField(handler, StoreHandler::kSmiHandlerOffset)));
         TailCallStub(StoreTransitionDescriptor{}, code, p->context(),

@@ -96,6 +96,7 @@
 //         - WasmMemoryObject
 //         - WasmModuleObject
 //         - WasmTableObject
+//         - WasmSuspenderObject
 //       - JSProxy
 //     - FixedArrayBase
 //       - ByteArray
@@ -697,6 +698,18 @@ class Object : public TaggedImpl<HeapObjectReferenceType::STRONG, Address> {
       base::Memory<T>(field_address(offset)) = value;
     }
   }
+
+  //
+  // CagedPointer field accessors.
+  //
+#ifdef V8_CAGED_POINTERS
+  inline Address ReadCagedPointerField(size_t offset,
+                                       PtrComprCageBase cage_base) const;
+  inline void WriteCagedPointerField(size_t offset, PtrComprCageBase cage_base,
+                                     Address value);
+  inline void WriteCagedPointerField(size_t offset, Isolate* isolate,
+                                     Address value);
+#endif  // V8_CAGED_POINTERS
 
   //
   // ExternalPointer_t field accessors.

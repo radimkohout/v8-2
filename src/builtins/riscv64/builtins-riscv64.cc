@@ -2431,7 +2431,7 @@ void Builtins::Generate_CallFunction(MacroAssembler* masm,
   //  -- a0 : the number of arguments
   //  -- a1 : the function to call (checked to be a JSFunction)
   // -----------------------------------
-  __ AssertFunction(a1);
+  __ AssertCallableFunction(a1);
 
   __ LoadTaggedPointerField(
       a2, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
@@ -3126,6 +3126,11 @@ void Builtins::Generate_DoubleToI(MacroAssembler* masm) {
 
 void Builtins::Generate_GenericJSToWasmWrapper(MacroAssembler* masm) {
   // TODO(v8:10701): Implement for this platform.
+  __ Trap();
+}
+
+void Builtins::Generate_WasmReturnPromiseOnSuspend(MacroAssembler* masm) {
+  // TODO(v8:12191): Implement for this platform.
   __ Trap();
 }
 

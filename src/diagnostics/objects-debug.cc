@@ -33,6 +33,7 @@
 #include "src/objects/js-array-inl.h"
 #include "src/objects/objects-inl.h"
 #include "src/objects/objects.h"
+#include "src/objects/turbofan-types-inl.h"
 #include "src/roots/roots.h"
 #ifdef V8_INTL_SUPPORT
 #include "src/objects/js-break-iterator-inl.h"
@@ -615,6 +616,7 @@ void Context::ContextVerify(Isolate* isolate) {
 
 void NativeContext::NativeContextVerify(Isolate* isolate) {
   ContextVerify(isolate);
+  CHECK(retained_maps() == Smi::zero() || retained_maps().IsWeakArrayList());
   CHECK_EQ(length(), NativeContext::NATIVE_CONTEXT_SLOTS);
   CHECK_EQ(kVariableSizeSentinel, map().instance_size());
 }
@@ -801,27 +803,27 @@ void String::StringVerify(Isolate* isolate) {
 
 void ConsString::ConsStringVerify(Isolate* isolate) {
   TorqueGeneratedClassVerifiers::ConsStringVerify(*this, isolate);
-  CHECK_GE(this->length(), ConsString::kMinLength);
-  CHECK(this->length() == this->first().length() + this->second().length());
-  if (this->IsFlat()) {
+  CHECK_GE(length(), ConsString::kMinLength);
+  CHECK(length() == first().length() + second().length());
+  if (IsFlat(isolate)) {
     // A flat cons can only be created by String::SlowFlatten.
     // Afterwards, the first part may be externalized or internalized.
-    CHECK(this->first().IsSeqString() || this->first().IsExternalString() ||
-          this->first().IsThinString());
+    CHECK(first().IsSeqString() || first().IsExternalString() ||
+          first().IsThinString());
   }
 }
 
 void ThinString::ThinStringVerify(Isolate* isolate) {
   TorqueGeneratedClassVerifiers::ThinStringVerify(*this, isolate);
-  CHECK(this->actual().IsInternalizedString());
-  CHECK(this->actual().IsSeqString() || this->actual().IsExternalString());
+  CHECK(actual().IsInternalizedString());
+  CHECK(actual().IsSeqString() || actual().IsExternalString());
 }
 
 void SlicedString::SlicedStringVerify(Isolate* isolate) {
   TorqueGeneratedClassVerifiers::SlicedStringVerify(*this, isolate);
-  CHECK(!this->parent().IsConsString());
-  CHECK(!this->parent().IsSlicedString());
-  CHECK_GE(this->length(), SlicedString::kMinLength);
+  CHECK(!parent().IsConsString());
+  CHECK(!parent().IsSlicedString());
+  CHECK_GE(length(), SlicedString::kMinLength);
 }
 
 USE_TORQUE_VERIFIER(ExternalString)
@@ -1666,10 +1668,12 @@ void WasmValueObject::WasmValueObjectVerify(Isolate* isolate) {
 void WasmExportedFunctionData::WasmExportedFunctionDataVerify(
     Isolate* isolate) {
   TorqueGeneratedClassVerifiers::WasmExportedFunctionDataVerify(*this, isolate);
-  CHECK(wrapper_code().kind() == CodeKind::JS_TO_WASM_FUNCTION ||
-        wrapper_code().kind() == CodeKind::C_WASM_ENTRY ||
-        (wrapper_code().is_builtin() &&
-         wrapper_code().builtin_id() == Builtin::kGenericJSToWasmWrapper));
+  CHECK(
+      wrapper_code().kind() == CodeKind::JS_TO_WASM_FUNCTION ||
+      wrapper_code().kind() == CodeKind::C_WASM_ENTRY ||
+      (wrapper_code().is_builtin() &&
+       (wrapper_code().builtin_id() == Builtin::kGenericJSToWasmWrapper ||
+        wrapper_code().builtin_id() == Builtin::kWasmReturnPromiseOnSuspend)));
 }
 
 #endif  // V8_ENABLE_WEBASSEMBLY

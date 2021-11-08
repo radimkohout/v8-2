@@ -462,7 +462,7 @@ class Shell : public i::AllStatic {
   enum class CodeType { kFileName, kString, kFunction, kInvalid, kNone };
 
   static bool ExecuteString(Isolate* isolate, Local<String> source,
-                            Local<Value> name, PrintResult print_result,
+                            Local<String> name, PrintResult print_result,
                             ReportExceptions report_exceptions,
                             ProcessMessageQueue process_message_queue);
   static bool ExecuteModule(Isolate* isolate, const char* file_name);
@@ -607,8 +607,9 @@ class Shell : public i::AllStatic {
   static void MakeDirectory(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void RemoveDirectory(const v8::FunctionCallbackInfo<v8::Value>& args);
   static MaybeLocal<Promise> HostImportModuleDynamically(
-      Local<Context> context, Local<ScriptOrModule> script_or_module,
-      Local<String> specifier, Local<FixedArray> import_assertions);
+      Local<Context> context, Local<Data> host_defined_options,
+      Local<Value> resource_name, Local<String> specifier,
+      Local<FixedArray> import_assertions);
 
   static void ModuleResolutionSuccessCallback(
       const v8::FunctionCallbackInfo<v8::Value>& info);

@@ -115,21 +115,28 @@ uint32_t Hash(const ZoneList<CharacterRange>* ranges) {
   return static_cast<uint32_t>(seed);
 }
 
+constexpr base::uc32 MaskEndOfRangeMarker(base::uc32 c) {
+  // CharacterRanges may use 0x10ffff as the end-of-range marker irrespective
+  // of whether the regexp IsUnicode or not; translate the marker value here.
+  DCHECK_IMPLIES(c > kMaxUInt16, c == String::kMaxCodePoint);
+  return c & 0xffff;
+}
+
 int RangeArrayLengthFor(const ZoneList<CharacterRange>* ranges) {
   const int ranges_length = ranges->length();
-  return ranges->at(ranges_length - 1).to() == kMaxUInt16
+  return MaskEndOfRangeMarker(ranges->at(ranges_length - 1).to()) == kMaxUInt16
              ? ranges_length * 2 - 1
              : ranges_length * 2;
 }
 
 bool Equals(const ZoneList<CharacterRange>* lhs, const Handle<ByteArray>& rhs) {
-  if (rhs->length() != RangeArrayLengthFor(lhs) * kUInt16Size) return false;
+  DCHECK_EQ(rhs->length() % kUInt16Size, 0);  // uc16 elements.
+  const int rhs_length = rhs->length() / kUInt16Size;
+  if (rhs_length != RangeArrayLengthFor(lhs)) return false;
   for (int i = 0; i < lhs->length(); i++) {
     const CharacterRange& r = lhs->at(i);
     if (rhs->get_uint16(i * 2 + 0) != r.from()) return false;
-    if (i == lhs->length() - 1 && r.to() == kMaxUInt16) {
-      break;  // Avoid overflow by leaving the last range open-ended.
-    }
+    if (i * 2 + 1 == rhs_length) break;
     if (rhs->get_uint16(i * 2 + 1) != r.to() + 1) return false;
   }
   return true;
@@ -144,13 +151,15 @@ Handle<ByteArray> MakeRangeArray(Isolate* isolate,
       isolate->factory()->NewByteArray(size_in_bytes);
   for (int i = 0; i < ranges_length; i++) {
     const CharacterRange& r = ranges->at(i);
-    DCHECK_LT(r.from(), kMaxUInt16);
+    DCHECK_LE(r.from(), kMaxUInt16);
     range_array->set_uint16(i * 2 + 0, r.from());
-    if (i == ranges_length - 1 && r.to() == kMaxUInt16) {
+    const base::uc32 to = MaskEndOfRangeMarker(r.to());
+    if (i == ranges_length - 1 && to == kMaxUInt16) {
+      DCHECK_EQ(byte_array_length, ranges_length * 2 - 1);
       break;  // Avoid overflow by leaving the last range open-ended.
     }
-    DCHECK_LT(r.to(), kMaxUInt16);
-    range_array->set_uint16(i * 2 + 1, r.to() + 1);  // Exclusive.
+    DCHECK_LT(to, kMaxUInt16);
+    range_array->set_uint16(i * 2 + 1, to + 1);  // Exclusive.
   }
   return range_array;
 }

@@ -240,6 +240,7 @@ class FullMarkingVerifier : public MarkingVerifier {
     CHECK(V8_EXTERNAL_CODE_SPACE_BOOL);
     Object maybe_code = slot.load(code_cage_base());
     HeapObject code;
+    // The slot might contain smi during CodeDataContainer creation, so skip it.
     if (maybe_code.GetHeapObject(&code)) {
       VerifyHeapObjectImpl(code);
     }
@@ -419,6 +420,7 @@ class FullEvacuationVerifier : public EvacuationVerifier {
     CHECK(V8_EXTERNAL_CODE_SPACE_BOOL);
     Object maybe_code = slot.load(code_cage_base());
     HeapObject code;
+    // The slot might contain smi during CodeDataContainer creation, so skip it.
     if (maybe_code.GetHeapObject(&code)) {
       VerifyHeapObjectImpl(code);
     }
@@ -1724,10 +1726,12 @@ void MarkCompactCollector::MarkRoots(RootVisitor* root_visitor,
   // Custom marking for top optimized frame.
   ProcessTopOptimizedFrame(custom_root_body_visitor, isolate());
 
-  isolate()->IterateClientIsolates(
-      [this, custom_root_body_visitor](Isolate* client) {
-        ProcessTopOptimizedFrame(custom_root_body_visitor, client);
-      });
+  if (isolate()->global_safepoint()) {
+    isolate()->global_safepoint()->IterateClientIsolates(
+        [this, custom_root_body_visitor](Isolate* client) {
+          ProcessTopOptimizedFrame(custom_root_body_visitor, client);
+        });
+  }
 }
 
 void MarkCompactCollector::VisitObject(HeapObject obj) {
@@ -4049,7 +4053,7 @@ class RememberedSetUpdatingItem : public UpdatingItem {
           (chunk_->slot_set<OLD_TO_CODE, AccessMode::NON_ATOMIC>() !=
            nullptr)) {
         PtrComprCageBase cage_base = heap_->isolate();
-#if V8_EXTERNAL_CODE_SPACE
+#ifdef V8_EXTERNAL_CODE_SPACE
         PtrComprCageBase code_cage_base(heap_->isolate()->code_cage_base());
 #else
         PtrComprCageBase code_cage_base = cage_base;
@@ -4260,6 +4264,11 @@ void MarkCompactCollector::UpdatePointersAfterEvacuation() {
     CollectRememberedSetUpdatingItems(&updating_items, heap()->map_space(),
                                       RememberedSetUpdatingMode::ALL);
 
+    // In order to update pointers in map space at the same time as other spaces
+    // we need to ensure that young generation is empty. Otherwise, iterating
+    // to space may require a valid body descriptor for e.g. WasmStruct which
+    // races with updating a slot in Map.
+    CHECK(FLAG_always_promote_young_mc);
     CollectToSpaceUpdatingItems(&updating_items);
     updating_items.push_back(
         std::make_unique<EphemeronTableUpdatingItem>(heap()));
@@ -4547,8 +4556,12 @@ class YoungGenerationEvacuationVerifier : public EvacuationVerifier {
   }
   void VerifyCodePointer(CodeObjectSlot slot) override {
     CHECK(V8_EXTERNAL_CODE_SPACE_BOOL);
-    Code code = Code::unchecked_cast(slot.load(code_cage_base()));
-    VerifyHeapObjectImpl(code);
+    Object maybe_code = slot.load(code_cage_base());
+    HeapObject code;
+    // The slot might contain smi during CodeDataContainer creation, so skip it.
+    if (maybe_code.GetHeapObject(&code)) {
+      VerifyHeapObjectImpl(code);
+    }
   }
   void VisitCodeTarget(Code host, RelocInfo* rinfo) override {
     Code target = Code::GetCodeFromTargetAddress(rinfo->target_address());

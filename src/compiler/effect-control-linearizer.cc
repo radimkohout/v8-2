@@ -30,6 +30,7 @@
 #include "src/objects/heap-number.h"
 #include "src/objects/oddball.h"
 #include "src/objects/ordered-hash-table.h"
+#include "src/objects/turbofan-types.h"
 
 namespace v8 {
 namespace internal {
@@ -4984,6 +4985,10 @@ MachineType MachineTypeFor(CTypeInfo::Type type) {
       return MachineType::Uint32();
     case CTypeInfo::Type::kInt64:
       return MachineType::Int64();
+    case CTypeInfo::Type::kAny:
+      static_assert(sizeof(AnyCType) == 8,
+                    "CTypeInfo::Type::kAny is assumed to be of size 64 bits.");
+      return MachineType::Int64();
     case CTypeInfo::Type::kUint64:
       return MachineType::Uint64();
     case CTypeInfo::Type::kFloat32:
@@ -5328,7 +5333,7 @@ Node* EffectControlLinearizer::LowerFastApiCall(Node* node) {
         StoreRepresentation(MachineRepresentation::kWord32, kNoWriteBarrier),
         stack_slot,
         static_cast<int>(offsetof(v8::FastApiCallbackOptions, fallback)),
-        __ ZeroConstant());
+        __ Int32Constant(0));
     __ Store(StoreRepresentation(MachineType::PointerRepresentation(),
                                  kNoWriteBarrier),
              stack_slot,
@@ -5434,7 +5439,7 @@ Node* EffectControlLinearizer::LowerFastApiCall(Node* node) {
       call_descriptor, c_arg_count + n.FastCallExtraInputCount() + 1, inputs,
       inputs[0], c_signature, c_arg_count, stack_slot);
 
-  Node* fast_call_result;
+  Node* fast_call_result = nullptr;
   switch (c_signature->ReturnInfo().GetType()) {
     case CTypeInfo::Type::kVoid:
       fast_call_result = __ UndefinedConstant();
@@ -5465,18 +5470,28 @@ Node* EffectControlLinearizer::LowerFastApiCall(Node* node) {
     case CTypeInfo::Type::kV8Value:
     case CTypeInfo::Type::kApiObject:
       UNREACHABLE();
+    case CTypeInfo::Type::kAny:
+      fast_call_result =
+          ChangeFloat64ToTagged(__ ChangeInt64ToFloat64(c_call_result),
+                                CheckForMinusZeroMode::kCheckForMinusZero);
+      break;
   }
 
-  if (!c_signature->HasOptions()) return fast_call_result;
-
-  DCHECK_NOT_NULL(stack_slot);
-  Node* load =
-      __ Load(MachineType::Int32(), stack_slot,
-              static_cast<int>(offsetof(v8::FastApiCallbackOptions, fallback)));
-
-  Node* is_zero = __ Word32Equal(load, __ Int32Constant(0));
   auto merge = __ MakeLabel(MachineRepresentation::kTagged);
-  __ Branch(is_zero, &if_success, &if_error);
+  if (c_signature->HasOptions()) {
+    DCHECK_NOT_NULL(stack_slot);
+    Node* load = __ Load(
+        MachineType::Int32(), stack_slot,
+        static_cast<int>(offsetof(v8::FastApiCallbackOptions, fallback)));
+
+    Node* is_zero = __ Word32Equal(load, __ Int32Constant(0));
+    __ Branch(is_zero, &if_success, &if_error);
+  } else {
+    // If c_call_result is nullptr, we didn't execute the fast path, so
+    // we need to follow the slow path.
+    Node* is_zero = __ WordEqual(c_call_result, __ IntPtrConstant(0));
+    __ Branch(is_zero, &if_error, &if_success);
+  }
 
   __ Bind(&if_success);
   __ Goto(&merge, fast_call_result);
@@ -6193,10 +6208,17 @@ Node* EffectControlLinearizer::LowerAssertType(Node* node) {
   Type type = OpParameter<Type>(node->op());
   CHECK(type.CanBeAsserted());
   Node* const input = node->InputAt(0);
-  Node* const min = __ NumberConstant(type.Min());
-  Node* const max = __ NumberConstant(type.Max());
-  CallBuiltin(Builtin::kCheckNumberInRange, node->op()->properties(), input,
-              min, max, __ SmiConstant(node->id()));
+  Node* allocated_type;
+  {
+    DCHECK(isolate()->CurrentLocalHeap()->is_main_thread());
+    base::Optional<UnparkedScope> unparked_scope;
+    if (isolate()->CurrentLocalHeap()->IsParked()) {
+      unparked_scope.emplace(isolate()->main_thread_local_isolate());
+    }
+    allocated_type = __ HeapConstant(type.AllocateOnHeap(factory()));
+  }
+  CallBuiltin(Builtin::kCheckTurbofanType, node->op()->properties(), input,
+              allocated_type, __ SmiConstant(node->id()));
   return input;
 }
 

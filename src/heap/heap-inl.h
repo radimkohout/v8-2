@@ -30,6 +30,7 @@
 #include "src/heap/paged-spaces-inl.h"
 #include "src/heap/read-only-heap.h"
 #include "src/heap/read-only-spaces.h"
+#include "src/heap/safepoint.h"
 #include "src/heap/spaces-inl.h"
 #include "src/heap/third-party/heap-api.h"
 #include "src/objects/allocation-site-inl.h"
@@ -111,11 +112,7 @@ base::EnumSet<CodeFlushMode> Heap::GetCodeFlushMode(Isolate* isolate) {
   return code_flush_mode;
 }
 
-Isolate* Heap::isolate() {
-  return reinterpret_cast<Isolate*>(
-      reinterpret_cast<intptr_t>(this) -
-      reinterpret_cast<size_t>(reinterpret_cast<Isolate*>(16)->heap()) + 16);
-}
+Isolate* Heap::isolate() { return Isolate::FromHeap(this); }
 
 int64_t Heap::external_memory() { return external_memory_.total(); }
 
@@ -795,6 +792,8 @@ AlwaysAllocateScopeForTesting::AlwaysAllocateScopeForTesting(Heap* heap)
 
 CodeSpaceMemoryModificationScope::CodeSpaceMemoryModificationScope(Heap* heap)
     : heap_(heap) {
+  DCHECK_EQ(ThreadId::Current(), heap_->isolate()->thread_id());
+  heap_->safepoint()->AssertActive();
   if (heap_->write_protect_code_memory()) {
     heap_->increment_code_space_memory_modification_scope_depth();
     heap_->code_space()->SetCodeModificationPermissions();
@@ -827,7 +826,6 @@ CodePageCollectionMemoryModificationScope::
     : heap_(heap) {
   if (heap_->write_protect_code_memory() &&
       !heap_->code_space_memory_modification_scope_depth()) {
-    heap_->EnableUnprotectedMemoryChunksRegistry();
     heap_->IncrementCodePageCollectionMemoryModificationScopeDepth();
   }
 }
@@ -839,7 +837,6 @@ CodePageCollectionMemoryModificationScope::
     heap_->DecrementCodePageCollectionMemoryModificationScopeDepth();
     if (heap_->code_page_collection_memory_modification_scope_depth() == 0) {
       heap_->ProtectUnprotectedMemoryChunks();
-      heap_->DisableUnprotectedMemoryChunksRegistry();
     }
   }
 }

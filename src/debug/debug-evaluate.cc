@@ -142,7 +142,7 @@ MaybeHandle<Object> DebugEvaluate::WithTopmostArguments(Isolate* isolate,
       Context::cast(it.frame()->context()).native_context(), isolate);
 
   // Materialize arguments as property on an extension object.
-  Handle<JSObject> materialized = factory->NewJSObjectWithNullProto();
+  Handle<JSObject> materialized = factory->NewSlowJSObjectWithNullProto();
   Handle<String> arguments_str = factory->arguments_string();
   JSObject::SetOwnPropertyIgnoreAttributes(
       materialized, arguments_str,
@@ -183,10 +183,10 @@ MaybeHandle<Object> DebugEvaluate::Evaluate(
   Handle<JSFunction> eval_fun;
   ASSIGN_RETURN_ON_EXCEPTION(
       isolate, eval_fun,
-      Compiler::GetFunctionFromEval(source, outer_info, context,
-                                    LanguageMode::kSloppy, NO_PARSE_RESTRICTION,
-                                    kNoSourcePosition, kNoSourcePosition,
-                                    kNoSourcePosition),
+      Compiler::GetFunctionFromEval(
+          source, outer_info, context, LanguageMode::kSloppy,
+          NO_PARSE_RESTRICTION, kNoSourcePosition, kNoSourcePosition,
+          kNoSourcePosition, ParsingWhileDebugging::kYes),
       Object);
 
   Handle<Object> result;

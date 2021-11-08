@@ -2498,7 +2498,7 @@ static void SerializerCodeEventListener(const v8::JitCodeEvent* event) {
 }
 
 v8::ScriptCompiler::CachedData* CompileRunAndProduceCache(
-    const char* source, CodeCacheType cacheType = CodeCacheType::kLazy) {
+    const char* js_source, CodeCacheType cacheType = CodeCacheType::kLazy) {
   v8::ScriptCompiler::CachedData* cache;
   v8::Isolate::CreateParams create_params;
   create_params.array_buffer_allocator = CcTest::array_buffer_allocator();
@@ -2509,7 +2509,7 @@ v8::ScriptCompiler::CachedData* CompileRunAndProduceCache(
     v8::Local<v8::Context> context = v8::Context::New(isolate1);
     v8::Context::Scope context_scope(context);
 
-    v8::Local<v8::String> source_str = v8_str(source);
+    v8::Local<v8::String> source_str = v8_str(js_source);
     v8::ScriptOrigin origin(isolate1, v8_str("test"));
     v8::ScriptCompiler::Source source(source_str, origin);
     v8::ScriptCompiler::CompileOptions options;
@@ -2550,8 +2550,8 @@ v8::ScriptCompiler::CachedData* CompileRunAndProduceCache(
 }
 
 TEST(CodeSerializerIsolates) {
-  const char* source = "function f() { return 'abc'; }; f() + 'def'";
-  v8::ScriptCompiler::CachedData* cache = CompileRunAndProduceCache(source);
+  const char* js_source = "function f() { return 'abc'; }; f() + 'def'";
+  v8::ScriptCompiler::CachedData* cache = CompileRunAndProduceCache(js_source);
 
   v8::Isolate::CreateParams create_params;
   create_params.array_buffer_allocator = CcTest::array_buffer_allocator();
@@ -2565,7 +2565,7 @@ TEST(CodeSerializerIsolates) {
     v8::Local<v8::Context> context = v8::Context::New(isolate2);
     v8::Context::Scope context_scope(context);
 
-    v8::Local<v8::String> source_str = v8_str(source);
+    v8::Local<v8::String> source_str = v8_str(js_source);
     v8::ScriptOrigin origin(isolate2, v8_str("test"));
     v8::ScriptCompiler::Source source(source_str, origin, cache);
     v8::Local<v8::UnboundScript> script;
@@ -2589,7 +2589,7 @@ TEST(CodeSerializerIsolates) {
 }
 
 TEST(CodeSerializerIsolatesEager) {
-  const char* source =
+  const char* js_source =
       "function f() {"
       "  return function g() {"
       "    return 'abc';"
@@ -2597,7 +2597,7 @@ TEST(CodeSerializerIsolatesEager) {
       "}"
       "f()() + 'def'";
   v8::ScriptCompiler::CachedData* cache =
-      CompileRunAndProduceCache(source, CodeCacheType::kEager);
+      CompileRunAndProduceCache(js_source, CodeCacheType::kEager);
 
   v8::Isolate::CreateParams create_params;
   create_params.array_buffer_allocator = CcTest::array_buffer_allocator();
@@ -2611,7 +2611,7 @@ TEST(CodeSerializerIsolatesEager) {
     v8::Local<v8::Context> context = v8::Context::New(isolate2);
     v8::Context::Scope context_scope(context);
 
-    v8::Local<v8::String> source_str = v8_str(source);
+    v8::Local<v8::String> source_str = v8_str(js_source);
     v8::ScriptOrigin origin(isolate2, v8_str("test"));
     v8::ScriptCompiler::Source source(source_str, origin, cache);
     v8::Local<v8::UnboundScript> script;
@@ -2639,9 +2639,9 @@ TEST(CodeSerializerAfterExecute) {
   // to always optimize breaks this test.
   bool prev_always_opt_value = FLAG_always_opt;
   FLAG_always_opt = false;
-  const char* source = "function f() { return 'abc'; }; f() + 'def'";
+  const char* js_source = "function f() { return 'abc'; }; f() + 'def'";
   v8::ScriptCompiler::CachedData* cache =
-      CompileRunAndProduceCache(source, CodeCacheType::kAfterExecute);
+      CompileRunAndProduceCache(js_source, CodeCacheType::kAfterExecute);
 
   v8::Isolate::CreateParams create_params;
   create_params.array_buffer_allocator = CcTest::array_buffer_allocator();
@@ -2654,7 +2654,7 @@ TEST(CodeSerializerAfterExecute) {
     v8::Local<v8::Context> context = v8::Context::New(isolate2);
     v8::Context::Scope context_scope(context);
 
-    v8::Local<v8::String> source_str = v8_str(source);
+    v8::Local<v8::String> source_str = v8_str(js_source);
     v8::ScriptOrigin origin(isolate2, v8_str("test"));
     v8::ScriptCompiler::Source source(source_str, origin, cache);
     v8::Local<v8::UnboundScript> script;
@@ -2690,8 +2690,8 @@ TEST(CodeSerializerAfterExecute) {
 }
 
 TEST(CodeSerializerFlagChange) {
-  const char* source = "function f() { return 'abc'; }; f() + 'def'";
-  v8::ScriptCompiler::CachedData* cache = CompileRunAndProduceCache(source);
+  const char* js_source = "function f() { return 'abc'; }; f() + 'def'";
+  v8::ScriptCompiler::CachedData* cache = CompileRunAndProduceCache(js_source);
 
   v8::Isolate::CreateParams create_params;
   create_params.array_buffer_allocator = CcTest::array_buffer_allocator();
@@ -2705,7 +2705,7 @@ TEST(CodeSerializerFlagChange) {
     v8::Local<v8::Context> context = v8::Context::New(isolate2);
     v8::Context::Scope context_scope(context);
 
-    v8::Local<v8::String> source_str = v8_str(source);
+    v8::Local<v8::String> source_str = v8_str(js_source);
     v8::ScriptOrigin origin(isolate2, v8_str("test"));
     v8::ScriptCompiler::Source source(source_str, origin, cache);
     v8::ScriptCompiler::CompileUnboundScript(
@@ -2717,8 +2717,8 @@ TEST(CodeSerializerFlagChange) {
 }
 
 TEST(CodeSerializerBitFlip) {
-  const char* source = "function f() { return 'abc'; }; f() + 'def'";
-  v8::ScriptCompiler::CachedData* cache = CompileRunAndProduceCache(source);
+  const char* js_source = "function f() { return 'abc'; }; f() + 'def'";
+  v8::ScriptCompiler::CachedData* cache = CompileRunAndProduceCache(js_source);
 
   // Arbitrary bit flip.
   int arbitrary_spot = 237;
@@ -2734,7 +2734,7 @@ TEST(CodeSerializerBitFlip) {
     v8::Local<v8::Context> context = v8::Context::New(isolate2);
     v8::Context::Scope context_scope(context);
 
-    v8::Local<v8::String> source_str = v8_str(source);
+    v8::Local<v8::String> source_str = v8_str(js_source);
     v8::ScriptOrigin origin(isolate2, v8_str("test"));
     v8::ScriptCompiler::Source source(source_str, origin, cache);
     v8::ScriptCompiler::CompileUnboundScript(
@@ -4255,7 +4255,7 @@ TEST(WeakArraySerializationInCodeCache) {
   delete cache;
 }
 
-TEST(CachedCompileFunctionInContext) {
+TEST(CachedCompileFunction) {
   DisableAlwaysOpt();
   LocalContext env;
   Isolate* isolate = CcTest::i_isolate();
@@ -4270,9 +4270,9 @@ TEST(CachedCompileFunctionInContext) {
   {
     v8::ScriptCompiler::Source script_source(source);
     v8::Local<v8::Function> fun =
-        v8::ScriptCompiler::CompileFunctionInContext(
-            env.local(), &script_source, 1, &arg_str, 0, nullptr,
-            v8::ScriptCompiler::kEagerCompile)
+        v8::ScriptCompiler::CompileFunction(env.local(), &script_source, 1,
+                                            &arg_str, 0, nullptr,
+                                            v8::ScriptCompiler::kEagerCompile)
             .ToLocalChecked();
     cache = v8::ScriptCompiler::CreateCodeCacheForFunction(fun);
   }
@@ -4281,7 +4281,7 @@ TEST(CachedCompileFunctionInContext) {
     DisallowCompilation no_compile_expected(isolate);
     v8::ScriptCompiler::Source script_source(source, cache);
     v8::Local<v8::Function> fun =
-        v8::ScriptCompiler::CompileFunctionInContext(
+        v8::ScriptCompiler::CompileFunction(
             env.local(), &script_source, 1, &arg_str, 0, nullptr,
             v8::ScriptCompiler::kConsumeCodeCache)
             .ToLocalChecked();

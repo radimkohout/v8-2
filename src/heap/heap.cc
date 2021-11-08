@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "include/v8-locker.h"
 #include "src/api/api-inl.h"
 #include "src/base/bits.h"
 #include "src/base/flags.h"
@@ -2251,36 +2252,28 @@ void Heap::CollectSharedGarbage(GarbageCollectionReason gc_reason) {
 void Heap::PerformSharedGarbageCollection(Isolate* initiator,
                                           GarbageCollectionReason gc_reason) {
   DCHECK(IsShared());
-  base::MutexGuard guard(isolate()->client_isolate_mutex());
+
+  // Stop all client isolates attached to this isolate
+  GlobalSafepointScope global_safepoint(initiator);
+
+  // Migrate shared isolate to the main thread of the initiator isolate.
+  v8::Locker locker(reinterpret_cast<v8::Isolate*>(isolate()));
+  v8::Isolate::Scope isolate_scope(reinterpret_cast<v8::Isolate*>(isolate()));
 
   const char* collector_reason = nullptr;
   GarbageCollector collector = GarbageCollector::MARK_COMPACTOR;
 
   tracer()->Start(collector, gc_reason, collector_reason);
 
-  isolate()->IterateClientIsolates([initiator](Isolate* client) {
-    DCHECK_NOT_NULL(client->shared_isolate());
+  DCHECK_NOT_NULL(isolate()->global_safepoint());
+
+  isolate()->global_safepoint()->IterateClientIsolates([](Isolate* client) {
     Heap* client_heap = client->heap();
-
-    IsolateSafepoint::StopMainThread stop_main_thread =
-        initiator == client ? IsolateSafepoint::StopMainThread::kNo
-                            : IsolateSafepoint::StopMainThread::kYes;
-
-    client_heap->safepoint()->EnterSafepointScope(stop_main_thread);
-    DCHECK(client_heap->deserialization_complete());
-
     client_heap->shared_old_allocator_->FreeLinearAllocationArea();
     client_heap->shared_map_allocator_->FreeLinearAllocationArea();
   });
 
   PerformGarbageCollection(GarbageCollector::MARK_COMPACTOR);
-
-  isolate()->IterateClientIsolates([initiator](Isolate* client) {
-    IsolateSafepoint::StopMainThread stop_main_thread =
-        initiator == client ? IsolateSafepoint::StopMainThread::kNo
-                            : IsolateSafepoint::StopMainThread::kYes;
-    client->heap()->safepoint()->LeaveSafepointScope(stop_main_thread);
-  });
 
   tracer()->Stop(collector);
 }
@@ -2657,7 +2650,7 @@ void Heap::ComputeFastPromotionMode() {
 
 void Heap::UnprotectAndRegisterMemoryChunk(MemoryChunk* chunk,
                                            UnprotectMemoryOrigin origin) {
-  if (unprotected_memory_chunks_registry_enabled_) {
+  if (code_page_collection_memory_modification_scope_depth_ > 0) {
     base::Optional<base::MutexGuard> guard;
     if (origin != UnprotectMemoryOrigin::kMainThread) {
       guard.emplace(&unprotected_memory_chunks_mutex_);
@@ -2678,7 +2671,7 @@ void Heap::UnregisterUnprotectedMemoryChunk(MemoryChunk* chunk) {
 }
 
 void Heap::ProtectUnprotectedMemoryChunks() {
-  DCHECK(unprotected_memory_chunks_registry_enabled_);
+  DCHECK_EQ(code_page_collection_memory_modification_scope_depth_, 0);
   for (auto chunk = unprotected_memory_chunks_.begin();
        chunk != unprotected_memory_chunks_.end(); chunk++) {
     CHECK(memory_allocator()->IsMemoryChunkExecutable(*chunk));
@@ -3045,7 +3038,7 @@ int Heap::GetFillToAlign(Address address, AllocationAlignment alignment) {
 }
 
 size_t Heap::GetCodeRangeReservedAreaSize() {
-  return kReservedCodeRangePages * MemoryAllocator::GetCommitPageSize();
+  return CodeRange::GetWritableReservedAreaSize();
 }
 
 HeapObject Heap::PrecedeWithFiller(HeapObject object, int filler_size) {
@@ -3796,7 +3789,7 @@ class SlotCollectingVisitor final : public ObjectVisitor {
 
   void VisitCodePointer(HeapObject host, CodeObjectSlot slot) override {
     CHECK(V8_EXTERNAL_CODE_SPACE_BOOL);
-#if V8_EXTERNAL_CODE_SPACE
+#ifdef V8_EXTERNAL_CODE_SPACE
     code_slots_.push_back(slot);
 #endif
   }
@@ -3812,14 +3805,14 @@ class SlotCollectingVisitor final : public ObjectVisitor {
   int number_of_slots() { return static_cast<int>(slots_.size()); }
 
   MaybeObjectSlot slot(int i) { return slots_[i]; }
-#if V8_EXTERNAL_CODE_SPACE
+#ifdef V8_EXTERNAL_CODE_SPACE
   CodeObjectSlot code_slot(int i) { return code_slots_[i]; }
   int number_of_code_slots() { return static_cast<int>(code_slots_.size()); }
 #endif
 
  private:
   std::vector<MaybeObjectSlot> slots_;
-#if V8_EXTERNAL_CODE_SPACE
+#ifdef V8_EXTERNAL_CODE_SPACE
   std::vector<CodeObjectSlot> code_slots_;
 #endif
 };
@@ -3867,7 +3860,7 @@ void Heap::VerifyObjectLayoutChange(HeapObject object, Map new_map) {
     for (int i = 0; i < new_visitor.number_of_slots(); i++) {
       DCHECK_EQ(new_visitor.slot(i), old_visitor.slot(i));
     }
-#if V8_EXTERNAL_CODE_SPACE
+#ifdef V8_EXTERNAL_CODE_SPACE
     DCHECK_EQ(new_visitor.number_of_code_slots(),
               old_visitor.number_of_code_slots());
     for (int i = 0; i < new_visitor.number_of_code_slots(); i++) {
@@ -4172,6 +4165,8 @@ std::unique_ptr<v8::MeasureMemoryDelegate> Heap::MeasureMemoryDelegate(
 
 void Heap::CollectCodeStatistics() {
   TRACE_EVENT0("v8", "Heap::CollectCodeStatistics");
+  SafepointScope safepoint_scope(this);
+  MakeHeapIterable();
   CodeStatistics::ResetCodeAndMetadataStatistics(isolate());
   // We do not look for code in new space, or map space.  If code
   // somehow ends up in those spaces, we would miss it here.
@@ -4643,35 +4638,6 @@ void Heap::RegisterCodeObject(Handle<Code> code) {
   }
 }
 
-// TODO(ishell): move builtin accessors out from Heap.
-Code Heap::builtin(Builtin builtin) {
-  DCHECK(Builtins::IsBuiltinId(builtin));
-  return Code::cast(
-      Object(isolate()->builtin_table()[static_cast<int>(builtin)]));
-}
-
-Address Heap::builtin_address(Builtin builtin) {
-  const int index = Builtins::ToInt(builtin);
-  DCHECK(Builtins::IsBuiltinId(builtin) || index == Builtins::kBuiltinCount);
-  // Note: Must return an address within the full builtin_table for
-  // IterateBuiltins to work.
-  return reinterpret_cast<Address>(&isolate()->builtin_table()[index]);
-}
-
-Address Heap::builtin_tier0_address(Builtin builtin) {
-  const int index = static_cast<int>(builtin);
-  DCHECK(Builtins::IsBuiltinId(builtin) || index == Builtins::kBuiltinCount);
-  return reinterpret_cast<Address>(
-      &isolate()->isolate_data()->builtin_tier0_table()[index]);
-}
-
-void Heap::set_builtin(Builtin builtin, Code code) {
-  DCHECK(Builtins::IsBuiltinId(builtin));
-  DCHECK(Internals::HasHeapObjectTag(code.ptr()));
-  // The given builtin may be uninitialized thus we cannot check its type here.
-  isolate()->builtin_table()[Builtins::ToInt(builtin)] = code.ptr();
-}
-
 void Heap::IterateWeakRoots(RootVisitor* v, base::EnumSet<SkipRoot> options) {
   DCHECK(!options.contains(SkipRoot::kWeak));
 
@@ -4900,9 +4866,12 @@ void Heap::IterateRootsIncludingClients(RootVisitor* v,
                                         base::EnumSet<SkipRoot> options) {
   IterateRoots(v, options);
 
-  isolate()->IterateClientIsolates([v, options](Isolate* client) {
-    client->heap()->IterateRoots(v, options);
-  });
+  if (isolate()->global_safepoint()) {
+    isolate()->global_safepoint()->IterateClientIsolates(
+        [v, options](Isolate* client) {
+          client->heap()->IterateRoots(v, options);
+        });
+  }
 }
 
 void Heap::IterateWeakGlobalHandles(RootVisitor* v) {
@@ -4910,16 +4879,21 @@ void Heap::IterateWeakGlobalHandles(RootVisitor* v) {
 }
 
 void Heap::IterateBuiltins(RootVisitor* v) {
+  Builtins* builtins = isolate()->builtins();
   for (Builtin builtin = Builtins::kFirst; builtin <= Builtins::kLast;
        ++builtin) {
-    v->VisitRootPointer(Root::kBuiltins, Builtins::name(builtin),
-                        FullObjectSlot(builtin_address(builtin)));
+    const char* name = Builtins::name(builtin);
+    v->VisitRootPointer(Root::kBuiltins, name, builtins->builtin_slot(builtin));
+    if (V8_EXTERNAL_CODE_SPACE_BOOL) {
+      v->VisitRootPointer(Root::kBuiltins, name,
+                          builtins->builtin_code_data_container_slot(builtin));
+    }
   }
 
   for (Builtin builtin = Builtins::kFirst; builtin <= Builtins::kLastTier0;
        ++builtin) {
     v->VisitRootPointer(Root::kBuiltins, Builtins::name(builtin),
-                        FullObjectSlot(builtin_tier0_address(builtin)));
+                        builtins->builtin_tier0_slot(builtin));
   }
 
   // The entry table doesn't need to be updated since all builtins are embedded.
@@ -5446,7 +5420,7 @@ void Heap::DisableInlineAllocation() {
 
   // Update inline allocation limit for old spaces.
   PagedSpaceIterator spaces(this);
-  CodeSpaceMemoryModificationScope modification_scope(this);
+  CodePageCollectionMemoryModificationScope modification_scope(this);
   for (PagedSpace* space = spaces.Next(); space != nullptr;
        space = spaces.Next()) {
     base::MutexGuard guard(space->mutex());
@@ -6144,7 +6118,9 @@ void Heap::AddRetainedMap(Handle<NativeContext> context, Handle<Map> map) {
   if (map->is_in_retained_map_list()) {
     return;
   }
-  Handle<WeakArrayList> array(context->retained_maps(), isolate());
+
+  Handle<WeakArrayList> array(WeakArrayList::cast(context->retained_maps()),
+                              isolate());
   if (array->IsFull()) {
     CompactRetainedMaps(*array);
   }
@@ -6845,7 +6821,7 @@ std::vector<WeakArrayList> Heap::FindAllRetainedMaps() {
   Object context = native_contexts_list();
   while (!context.IsUndefined(isolate())) {
     NativeContext native_context = NativeContext::cast(context);
-    result.push_back(native_context.retained_maps());
+    result.push_back(WeakArrayList::cast(native_context.retained_maps()));
     context = native_context.next_context_link();
   }
   return result;
@@ -6872,6 +6848,7 @@ void VerifyPointersVisitor::VisitCodePointer(HeapObject host,
   CHECK(V8_EXTERNAL_CODE_SPACE_BOOL);
   Object maybe_code = slot.load(code_cage_base());
   HeapObject code;
+  // The slot might contain smi during CodeDataContainer creation.
   if (maybe_code.GetHeapObject(&code)) {
     VerifyCodeObjectImpl(code);
   } else {
@@ -7001,7 +6978,7 @@ Map Heap::GcSafeMapOfCodeSpaceObject(HeapObject object) {
   PtrComprCageBase cage_base(isolate());
   MapWord map_word = object.map_word(cage_base, kRelaxedLoad);
   if (map_word.IsForwardingAddress()) {
-#if V8_EXTERNAL_CODE_SPACE
+#ifdef V8_EXTERNAL_CODE_SPACE
     PtrComprCageBase code_cage_base(isolate()->code_cage_base());
 #else
     PtrComprCageBase code_cage_base = cage_base;
@@ -7035,7 +7012,7 @@ Code Heap::GcSafeFindCodeForInnerPointer(Address inner_pointer) {
   Builtin maybe_builtin =
       InstructionStream::TryLookupCode(isolate(), inner_pointer);
   if (Builtins::IsBuiltinId(maybe_builtin)) {
-    return builtin(maybe_builtin);
+    return isolate()->builtins()->code(maybe_builtin);
   }
 
   if (V8_ENABLE_THIRD_PARTY_HEAP_BOOL) {

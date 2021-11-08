@@ -144,11 +144,7 @@ class UncompiledDataWithPreparseData
 class InterpreterData
     : public TorqueGeneratedInterpreterData<InterpreterData, Struct> {
  public:
-  DECL_ACCESSORS(interpreter_trampoline, Code)
-
  private:
-  DECL_ACCESSORS(raw_interpreter_trampoline, CodeT)
-
   TQ_OBJECT_CONSTRUCTORS(InterpreterData)
 };
 
@@ -176,7 +172,7 @@ class SharedFunctionInfo
   inline void SetName(String name);
 
   // Get the code object which represents the execution of this function.
-  V8_EXPORT_PRIVATE Code GetCode() const;
+  V8_EXPORT_PRIVATE CodeT GetCode() const;
 
   // Get the abstract code associated with the function, which will either be
   // a Code object or a BytecodeArray.
@@ -193,6 +189,11 @@ class SharedFunctionInfo
                                    HeapObject script_object,
                                    int function_literal_id,
                                    bool reset_preparsed_scope_data = true);
+
+  // Copy the data from another SharedFunctionInfo. Used for copying data into
+  // and out of a placeholder SharedFunctionInfo, for off-thread compilation
+  // which is not allowed to touch a main-thread-visible SharedFunctionInfo.
+  void CopyFrom(SharedFunctionInfo other);
 
   // Layout description of the optimized code map.
   static const int kEntriesStart = 0;
@@ -303,13 +304,13 @@ class SharedFunctionInfo
   inline BytecodeArray GetBytecodeArray(IsolateT* isolate) const;
 
   inline void set_bytecode_array(BytecodeArray bytecode);
-  inline Code InterpreterTrampoline() const;
+  inline CodeT InterpreterTrampoline() const;
   inline bool HasInterpreterData() const;
   inline InterpreterData interpreter_data() const;
   inline void set_interpreter_data(InterpreterData interpreter_data);
   inline bool HasBaselineCode() const;
-  inline Code baseline_code(AcquireLoadTag) const;
-  inline void set_baseline_code(Code baseline_code, ReleaseStoreTag);
+  inline CodeT baseline_code(AcquireLoadTag) const;
+  inline void set_baseline_code(CodeT baseline_code, ReleaseStoreTag);
   inline void FlushBaselineCode();
   inline BytecodeArray GetActiveBytecodeArray() const;
   inline void SetActiveBytecodeArray(BytecodeArray bytecode);
@@ -480,7 +481,7 @@ class SharedFunctionInfo
   inline bool optimization_disabled() const;
 
   // The reason why optimization was disabled.
-  inline BailoutReason disable_optimization_reason() const;
+  inline BailoutReason disabled_optimization_reason() const;
 
   // Disable (further) attempted optimization of all functions sharing this
   // shared function info.
@@ -554,7 +555,8 @@ class SharedFunctionInfo
   // TODO(caitp): make this a flag set during parsing
   inline bool has_simple_parameters();
 
-  // Initialize a SharedFunctionInfo from a parsed function literal.
+  // Initialize a SharedFunctionInfo from a parsed or preparsed function
+  // literal.
   template <typename IsolateT>
   static void InitFromFunctionLiteral(IsolateT* isolate,
                                       Handle<SharedFunctionInfo> shared_info,

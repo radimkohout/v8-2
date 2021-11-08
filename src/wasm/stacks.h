@@ -20,13 +20,11 @@ namespace wasm {
 
 struct JumpBuffer {
   void* sp;
-  void* fp;
   void* stack_limit;
   // TODO(thibaudm/fgm): Add general-purpose registers.
 };
 
 constexpr int kJmpBufSpOffset = offsetof(JumpBuffer, sp);
-constexpr int kJmpBufFpOffset = offsetof(JumpBuffer, fp);
 constexpr int kJmpBufStackLimitOffset = offsetof(JumpBuffer, stack_limit);
 
 class StackMemory {
@@ -36,7 +34,7 @@ class StackMemory {
   // Returns a non-owning view of the current stack.
   static StackMemory* GetCurrentStackView(Isolate* isolate) {
     byte* limit =
-        *reinterpret_cast<byte**>(isolate->stack_guard()->address_of_jslimit());
+        reinterpret_cast<byte*>(isolate->stack_guard()->real_jslimit());
     return new StackMemory(limit);
   }
 

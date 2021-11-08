@@ -306,6 +306,21 @@ Handle<SharedFunctionInfo> FactoryBase<Impl>::NewSharedFunctionInfoForLiteral(
 }
 
 template <typename Impl>
+Handle<SharedFunctionInfo> FactoryBase<Impl>::CloneSharedFunctionInfo(
+    Handle<SharedFunctionInfo> other) {
+  Map map = read_only_roots().shared_function_info_map();
+
+  SharedFunctionInfo shared =
+      SharedFunctionInfo::cast(NewWithImmortalMap(map, AllocationType::kOld));
+  DisallowGarbageCollection no_gc;
+
+  shared.CopyFrom(*other);
+  shared.clear_padding();
+
+  return handle(shared, isolate());
+}
+
+template <typename Impl>
 Handle<PreparseData> FactoryBase<Impl>::NewPreparseData(int data_length,
                                                         int children_length) {
   int size = PreparseData::SizeFor(data_length, children_length);

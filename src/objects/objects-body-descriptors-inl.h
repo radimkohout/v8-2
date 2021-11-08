@@ -24,6 +24,7 @@
 #include "src/objects/synthetic-module.h"
 #include "src/objects/torque-defined-classes-inl.h"
 #include "src/objects/transitions.h"
+#include "src/objects/turbofan-types-inl.h"
 
 #if V8_ENABLE_WEBASSEMBLY
 #include "src/wasm/wasm-objects-inl.h"
@@ -561,7 +562,7 @@ class PrototypeInfo::BodyDescriptor final : public BodyDescriptorBase {
                                  ObjectVisitor* v) {
     IteratePointers(obj, HeapObject::kHeaderSize, kObjectCreateMapOffset, v);
     IterateMaybeWeakPointer(obj, kObjectCreateMapOffset, v);
-    IteratePointers(obj, kObjectCreateMapOffset + kTaggedSize, object_size, v);
+    STATIC_ASSERT(kObjectCreateMapOffset + kTaggedSize == kHeaderSize);
   }
 
   static inline int SizeOf(Map map, HeapObject obj) {
@@ -636,6 +637,22 @@ class WasmJSFunctionData::BodyDescriptor final : public BodyDescriptorBase {
                                                         v);
     IteratePointers(obj, WasmFunctionData::kStartOfStrongFieldsOffset,
                     kEndOfStrongFieldsOffset, v);
+  }
+
+  static inline int SizeOf(Map map, HeapObject object) { return kSize; }
+};
+
+class WasmApiFunctionRef::BodyDescriptor final : public BodyDescriptorBase {
+ public:
+  static bool IsValidSlot(Map map, HeapObject obj, int offset) {
+    UNREACHABLE();
+  }
+
+  template <typename ObjectVisitor>
+  static inline void IterateBody(Map map, HeapObject obj, int object_size,
+                                 ObjectVisitor* v) {
+    IteratePointers(obj, kStartOfStrongFieldsOffset, kEndOfStrongFieldsOffset,
+                    v);
   }
 
   static inline int SizeOf(Map map, HeapObject object) { return kSize; }
@@ -1060,6 +1077,9 @@ ReturnType BodyDescriptorApply(InstanceType type, T1 p1, T2 p2, T3 p3, T4 p4) {
     case WASM_JS_FUNCTION_DATA_TYPE:
       return Op::template apply<WasmJSFunctionData::BodyDescriptor>(p1, p2, p3,
                                                                     p4);
+    case WASM_API_FUNCTION_REF_TYPE:
+      return Op::template apply<WasmApiFunctionRef::BodyDescriptor>(p1, p2, p3,
+                                                                    p4);
     case WASM_STRUCT_TYPE:
       return Op::template apply<WasmStruct::BodyDescriptor>(p1, p2, p3, p4);
     case WASM_TYPE_INFO_TYPE:
@@ -1140,11 +1160,12 @@ ReturnType BodyDescriptorApply(InstanceType type, T1 p1, T2 p2, T3 p3, T4 p4) {
     case JS_SEGMENTS_TYPE:
 #endif  // V8_INTL_SUPPORT
 #if V8_ENABLE_WEBASSEMBLY
-    case WASM_TAG_OBJECT_TYPE:
     case WASM_GLOBAL_OBJECT_TYPE:
     case WASM_MEMORY_OBJECT_TYPE:
     case WASM_MODULE_OBJECT_TYPE:
+    case WASM_SUSPENDER_OBJECT_TYPE:
     case WASM_TABLE_OBJECT_TYPE:
+    case WASM_TAG_OBJECT_TYPE:
     case WASM_VALUE_OBJECT_TYPE:
 #endif  // V8_ENABLE_WEBASSEMBLY
       return Op::template apply<JSObject::BodyDescriptor>(p1, p2, p3, p4);

@@ -4,6 +4,7 @@
 
 #include "src/codegen/external-reference.h"
 
+#include "include/v8-fast-api-calls.h"
 #include "src/api/api.h"
 #include "src/base/ieee754.h"
 #include "src/codegen/cpu-features.h"
@@ -11,10 +12,11 @@
 #include "src/date/date.h"
 #include "src/debug/debug.h"
 #include "src/deoptimizer/deoptimizer.h"
+#include "src/execution/encoded-c-signature.h"
 #include "src/execution/isolate-utils.h"
 #include "src/execution/isolate.h"
 #include "src/execution/microtask-queue.h"
-#include "src/execution/simulator-base.h"
+#include "src/execution/simulator.h"
 #include "src/heap/heap-inl.h"
 #include "src/heap/heap.h"
 #include "src/ic/stub-cache.h"
@@ -173,8 +175,18 @@ static ExternalReference::Type BuiltinCallTypeForResultSize(int result_size) {
 }
 
 // static
+ExternalReference ExternalReference::Create(ApiFunction* fun, Type type) {
+  return ExternalReference(Redirect(fun->address(), type));
+}
+
+// static
 ExternalReference ExternalReference::Create(
-    ApiFunction* fun, Type type = ExternalReference::BUILTIN_CALL) {
+    Isolate* isolate, ApiFunction* fun, Type type, Address* c_functions,
+    const CFunctionInfo* const* c_signatures, unsigned num_functions) {
+#ifdef USE_SIMULATOR_WITH_GENERIC_C_CALLS
+  Simulator::current(isolate)->RegisterFunctionsAndSignatures(
+      c_functions, c_signatures, num_functions);
+#endif  //  USE_SIMULATOR_WITH_GENERIC_C_CALLS
   return ExternalReference(Redirect(fun->address(), type));
 }
 
@@ -198,15 +210,31 @@ ExternalReference ExternalReference::isolate_address(Isolate* isolate) {
   return ExternalReference(isolate);
 }
 
-ExternalReference ExternalReference::builtins_address(Isolate* isolate) {
-  return ExternalReference(
-      isolate->heap()->builtin_address(Builtins::FromInt(0)));
+ExternalReference ExternalReference::builtins_table(Isolate* isolate) {
+  return ExternalReference(isolate->builtin_table());
 }
+
+#ifdef V8_EXTERNAL_CODE_SPACE
+ExternalReference ExternalReference::builtins_code_data_container_table(
+    Isolate* isolate) {
+  return ExternalReference(isolate->builtin_code_data_container_table());
+}
+#endif  // V8_EXTERNAL_CODE_SPACE
 
 ExternalReference ExternalReference::handle_scope_implementer_address(
     Isolate* isolate) {
   return ExternalReference(isolate->handle_scope_implementer_address());
 }
+
+#ifdef V8_VIRTUAL_MEMORY_CAGE
+ExternalReference ExternalReference::virtual_memory_cage_base_address() {
+  return ExternalReference(GetProcessWideVirtualMemoryCage()->base_address());
+}
+
+ExternalReference ExternalReference::virtual_memory_cage_end_address() {
+  return ExternalReference(GetProcessWideVirtualMemoryCage()->end_address());
+}
+#endif
 
 #ifdef V8_HEAP_SANDBOX
 ExternalReference ExternalReference::external_pointer_table_address(
