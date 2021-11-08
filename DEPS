@@ -91,7 +91,7 @@ deps = {
   'buildtools/linux64': {
     'packages': [
       {
-        'package': 'gn/gn/linux-amd64',
+        'package': 'gn/gn/linux-arm64',
         'version': Var('gn_version'),
       }
     ],
